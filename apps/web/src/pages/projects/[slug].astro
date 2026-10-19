@@ -1,0 +1,139 @@
+---
+/**
+ * 项目详情（PRD F3 / AC3.3：正文代码块有高亮且可横向滚动，不撑破布局）。
+ * 不存在的 slug（或类型不符）一律走 404 分支。
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import TagPill from '../../components/TagPill.astro';
+import { renderMarkdown } from '@portfolio/shared/markdown';
+import { loadProjectDetail, loadSiteContext } from '../../lib/server/content';
+import { formatDate, mediaUrl } from '../../lib/format';
+
+const { slug } = Astro.params;
+const { settings, profile } = await loadSiteContext();
+const detail = slug ? await loadProjectDetail(slug) : null;
+
+// 项目不存在时返回真正的 404 状态码，而不是渲染 200 的空页面（会影响 SEO）
+if (!detail) {
+  return Astro.rewrite('/404');
+}
+
+const { project, adjacent } = detail;
+const [contentHtml, coverUrl] = await Promise.all([
+  project.contentMd ? renderMarkdown(project.contentMd) : Promise.resolve(''),
+  Promise.resolve(mediaUrl(project.coverKey)),
+]);
+
+const STATUS_LABEL: Record<string, string> = {
+  active: '进行中',
+  completed: '已完成',
+  archived: '归档',
+};
+---
+
+<BaseLayout
+  title={project.title}
+  description={project.summary ?? ''}
+  currentPath="/projects"
+  settings={settings}
+  profile={profile}
+  dimStars
+>
+  <article class="container">
+    <header class="page-head">
+      <div class="tag-row" style="margin-bottom: var(--space-3)">
+        <span class="badge">{STATUS_LABEL[project.status] ?? project.status}</span>
+        {project.tags.map((tag) => <TagPill tag={tag} href={`/tags/${tag.slug}`} />)}
+      </div>
+
+      <h1 class="page-head__title">{project.title}</h1>
+      {project.summary && <p class="page-head__lead">{project.summary}</p>}
+
+      <p class="post-item__meta" style="margin-top: var(--space-4)">
+        {project.startedAt && <span class="tabular">起始 {formatDate(project.startedAt)}</span>}
+        {project.endedAt && <span class="tabular">结束 {formatDate(project.endedAt)}</span>}
+      </p>
+
+      <div class="hero__cta">
+        {
+          project.repoUrl && (
+            <a class="btn btn--ghost" href={project.repoUrl} target="_blank" rel="noopener noreferrer">
+              查看仓库
+            </a>
+          )
+        }
+        {
+          project.demoUrl && (
+            <a class="btn btn--primary" href={project.demoUrl} target="_blank" rel="noopener noreferrer">
+              在线演示
+            </a>
+          )
+        }
+      </div>
+    </header>
+
+    {
+      coverUrl && (
+        // 首屏封面不懒加载、并给出宽高，避免布局跳动
+        <img
+          class="project-cover"
+          src={coverUrl}
+          alt={`${project.title} 的封面`}
+          width="1120"
+          height="630"
+          decoding="async"
+        />
+      )
+    }
+
+    {
+      contentHtml ? (
+        <div class="prose" set:html={contentHtml} />
+      ) : (
+        <p class="page-head__lead">这个项目还没有补充正文说明。</p>
+      )
+    }
+
+    <nav class="adjacent" aria-label="相邻项目">
+      <div>
+        {
+          adjacent.previous && (
+            <a href={`/projects/${adjacent.previous.slug}`}>
+              ← 上一个：{adjacent.previous.title}
+            </a>
+          )
+        }
+      </div>
+      <div style="text-align: right">
+        {
+          adjacent.next && (
+            <a href={`/projects/${adjacent.next.slug}`}>下一个：{adjacent.next.title} →</a>
+          )
+        }
+      </div>
+    </nav>
+  </article>
+</BaseLayout>
+
+<style>
+  .project-cover {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    height: auto;
+    object-fit: cover;
+    margin-bottom: var(--space-7);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+  }
+
+  .adjacent {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--space-4);
+    margin-top: var(--space-8);
+    padding-top: var(--space-5);
+    border-top: 1px solid var(--border-subtle);
+    font-size: var(--text-sm);
+  }
+</style>

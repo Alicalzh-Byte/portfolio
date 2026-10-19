@@ -1,0 +1,107 @@
+---
+/**
+ * 文章列表（PRD F4）。草稿由数据层过滤，这里拿到的必然只有已发布文章。
+ * 同一页提供标签筛选（URL 可分享）与 RSS 入口。
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PostItem from '../../components/PostItem.astro';
+import EmptyState from '../../components/EmptyState.astro';
+import Pagination from '../../components/Pagination.astro';
+import { parsePageQuery, parseTagParams, totalPages } from '@portfolio/shared/query';
+import { loadPostList, loadSiteContext, loadTags } from '../../lib/server/content';
+
+const { settings, profile } = await loadSiteContext();
+
+const params = Astro.url.searchParams;
+const { page, pageSize } = parsePageQuery(params);
+const selectedTags = parseTagParams(params);
+
+const [tags, postList] = await Promise.all([
+  loadTags(),
+  loadPostList({ page, pageSize, tagSlugs: selectedTags }),
+]);
+
+const pageCount = totalPages(postList.total, pageSize);
+
+function buildHref(next: { page?: number; tags?: string[] }): string {
+  const search = new URLSearchParams();
+  for (const tag of next.tags ?? selectedTags) search.append('tag', tag);
+  const targetPage = next.page ?? 1;
+  if (targetPage > 1) search.set('page', String(targetPage));
+  const query = search.toString();
+  return query ? `/blog?${query}` : '/blog';
+}
+
+function toggleTag(slug: string): string {
+  const next = selectedTags.includes(slug)
+    ? selectedTags.filter((item) => item !== slug)
+    : [...selectedTags, slug];
+  return buildHref({ tags: next, page: 1 });
+}
+
+const availableTags = tags.filter((tag) => tag.postCount > 0);
+---
+
+<BaseLayout
+  title="博客"
+  description="技术笔记、实践记录与思考，支持标签筛选与 RSS 订阅。"
+  currentPath="/blog"
+  settings={settings}
+  profile={profile}
+>
+  <div class="container">
+    <header class="page-head">
+      <h1 class="page-head__title">博客</h1>
+      <p class="page-head__lead">
+        共 {postList.total} 篇已发布文章{selectedTags.length > 0 ? '（已筛选）' : ''}。
+        <a href="/rss.xml">RSS 订阅</a>
+      </p>
+    </header>
+
+    {
+      availableTags.length > 0 && (
+        <div class="toolbar" aria-label="按标签筛选">
+          <span class="toolbar__label">按标签筛选：</span>
+          <div class="tag-row">
+            {availableTags.map((tag) => (
+              <a
+                class="tag"
+                href={toggleTag(tag.slug)}
+                aria-pressed={selectedTags.includes(tag.slug) ? 'true' : 'false'}
+              >
+                {tag.name}
+                <span class="tabular"> {tag.postCount}</span>
+              </a>
+            ))}
+          </div>
+          {selectedTags.length > 0 && (
+            <a class="toolbar__label" href="/blog">
+              清除筛选
+            </a>
+          )}
+        </div>
+      )
+    }
+
+    {
+      postList.items.length > 0 ? (
+        <div class="post-list">
+          {postList.items.map((post) => (
+            <PostItem post={post} />
+          ))}
+        </div>
+      ) : selectedTags.length > 0 ? (
+        <EmptyState
+          title="没有匹配的文章"
+          text="当前标签下还没有已发布的文章。"
+          actionHref="/blog"
+          actionLabel="清除筛选"
+        />
+      ) : (
+        <EmptyState title="还没有已发布的文章" text="草稿不会出现在列表、RSS 与站点地图里。" />
+      )
+    }
+
+    <Pagination page={page} totalPages={pageCount} hrefFor={(target) => buildHref({ page: target })} />
+  </div>
+</BaseLayout>

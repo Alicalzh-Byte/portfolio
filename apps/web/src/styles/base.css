@@ -1,0 +1,192 @@
+/**
+ * 基础样式：重置、排版基线、无障碍基础设施。
+ * 组件样式在 components.css，长文排版在 prose.css。
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+html {
+  /* 深色站点最关键的抗白闪手段：HTML 一到就定深色，不等外部 CSS（TECH_DESIGN §4.4） */
+  background: var(--bg-base);
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* 尊重系统「减少动态效果」设置：关闭平滑滚动本身也是降级的一部分 */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+body {
+  min-height: 100vh;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* 内容层必须位于星空之上：星空是 position: fixed 的最低层 */
+.page-shell {
+  position: relative;
+  z-index: var(--z-content);
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+}
+
+main {
+  flex: 1;
+}
+
+img,
+picture,
+svg,
+video {
+  display: block;
+  max-width: 100%;
+}
+
+img {
+  height: auto;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--accent-2);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-weight: 650;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+
+/* 数字等宽对齐：时间线、日期、统计列不跳动（PRD §5.3） */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------- 无障碍基础设施（PRD §5.8） ---------------- */
+
+/* 「跳到主内容」链接：键盘用户第一个 Tab 就能跳过导航 */
+.skip-link {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-2);
+  z-index: calc(var(--z-nav) + 1);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border-strong);
+  transform: translateY(-200%);
+  transition: transform var(--dur-state) var(--ease-standard);
+}
+
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+/* 深色下的焦点光环必须可见：默认 outline 在很多浏览器里几乎看不见 */
+:focus-visible {
+  outline: 2px solid var(--accent-2);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* 仅供屏幕阅读器 */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------------- 布局容器 ---------------- */
+
+.container {
+  width: 100%;
+  max-width: var(--content-max);
+  margin-inline: auto;
+  padding-inline: var(--page-gutter);
+}
+
+.section {
+  padding-block: clamp(var(--space-7), 8vw, var(--space-10));
+}
+
+.section--tight {
+  padding-block: clamp(var(--space-6), 6vw, var(--space-8));
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+/* 进入视口的错峰淡入。降级规则见文件末：reduced-motion 下直接呈现终态。 */
+.reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity var(--dur-enter) var(--ease-standard),
+    transform var(--dur-enter) var(--ease-standard);
+}
+
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+/**
+ * 关键降级（AGENTS.md §4.8 / PRD §5.7）：
+ * 关闭动效时必须直接呈现终态。若这里只写 `animation: none`，
+ * 元素会停留在 opacity: 0 —— 也就是「关了动效就白屏」的经典事故。
+ */
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

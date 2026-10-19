@@ -1,0 +1,178 @@
+---
+/**
+ * 关于页（PRD §3.2 / F1 / F2）：长版简介 → 经历时间线 → 教育与证书 → 简历下载。
+ * 正文是 Markdown，走 packages/shared 的唯一渲染管线。
+ */
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Timeline from '../components/Timeline.astro';
+import EmptyState from '../components/EmptyState.astro';
+import { renderMarkdown } from '@portfolio/shared/markdown';
+import { loadSiteContext, loadSkillGroups, loadTimeline } from '../lib/server/content';
+import { mailtoHref, mediaUrl, nameInitial } from '../lib/format';
+
+const { settings, profile } = await loadSiteContext();
+const [timelineItems, skillGroups] = await Promise.all([
+  loadTimeline(),
+  loadSkillGroups(),
+]);
+
+const hidden = new Set(profile?.hiddenFields ?? []);
+const aboutHtml = profile?.aboutMd ? await renderMarkdown(profile.aboutMd) : '';
+const avatarUrl = mediaUrl(profile?.avatarKey);
+const resumeUrl = profile?.resumeKey ? mediaUrl(profile.resumeKey) : null;
+const emailHref = mailtoHref(profile?.email);
+---
+
+<BaseLayout title="关于" currentPath="/about" settings={settings} profile={profile}>
+  <div class="container">
+    <header class="page-head">
+      <h1 class="page-head__title">关于</h1>
+      {profile?.headline && <p class="page-head__lead">{profile.headline}</p>}
+    </header>
+
+    <section class="section section--tight" aria-labelledby="intro-heading">
+      <h2 class="section-heading__title" id="intro-heading">自我介绍</h2>
+
+      <div class="about-grid">
+        {
+          aboutHtml ? (
+            // 渲染产物已由 rehype-sanitize 消毒；这里注入的是**经过消毒的 HTML**，
+            // 不是用户原始输入（AGENTS.md §4.4）
+            <div class="prose" set:html={aboutHtml} />
+          ) : (
+            <EmptyState title="还没有填写长版简介" text="后台「个人信息」中的 Markdown 简介会渲染在这里。" />
+          )
+        }
+
+        <aside class="about-aside">
+          {
+            profile && (
+              <div class="avatar">
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt={`${profile.displayName} 的头像`} width="168" height="168" />
+                ) : (
+                  <span class="avatar__initial" aria-hidden="true">
+                    {nameInitial(profile.displayName)}
+                  </span>
+                )}
+              </div>
+            )
+          }
+
+          <dl class="meta-list">
+            {profile?.displayName && (
+              <>
+                <dt>姓名</dt>
+                <dd>{profile.displayName}</dd>
+              </>
+            )}
+            {profile?.location && !hidden.has('location') && (
+              <>
+                <dt>所在地</dt>
+                <dd>{profile.location}</dd>
+              </>
+            )}
+            {profile?.status && !hidden.has('status') && (
+              <>
+                <dt>当前状态</dt>
+                <dd>{profile.status}</dd>
+              </>
+            )}
+          </dl>
+
+          <div class="stack">
+            {resumeUrl && (
+              // download 属性让浏览器直接下载而不是尝试内联打开
+              <a class="btn btn--ghost" href={resumeUrl} download>
+                下载简历
+              </a>
+            )}
+            {emailHref && (
+              <a class="btn btn--ghost" href={emailHref}>
+                邮件联系
+              </a>
+            )}
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="section section--tight reveal" aria-labelledby="timeline-heading">
+      <h2 class="section-heading__title" id="timeline-heading">经历</h2>
+      {
+        timelineItems.length > 0 ? (
+          <Timeline items={timelineItems} />
+        ) : (
+          <EmptyState title="还没有经历条目" text="后台可维护时间线条目，内容会按排序值展示。" />
+        )
+      }
+    </section>
+
+    <section class="section section--tight reveal" aria-labelledby="skills-detail-heading">
+      <h2 class="section-heading__title" id="skills-detail-heading">技能明细</h2>
+      {
+        skillGroups.length > 0 ? (
+          <div class="skill-groups">
+            {skillGroups.map((group) => (
+              <div class="skill-group">
+                <h3 class="skill-group__title">{group.name}</h3>
+                <div class="skill-group__items">
+                  {group.skills.map((skill) => (
+                    <span class="skill">
+                      {skill.name}
+                      {skill.level !== null && (
+                        <span class="skill__dots" aria-label={`熟练度 ${skill.level} / 5`}>
+                          {Array.from({ length: 5 }, (_, index) => (
+                            <span class={`skill__dot${index < (skill.level ?? 0) ? ' skill__dot--on' : ''}`} />
+                          ))}
+                        </span>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState title="还没有技能条目" text="技能分组与条目由后台维护。" />
+        )
+      }
+    </section>
+  </div>
+</BaseLayout>
+
+<style>
+  .about-grid {
+    display: grid;
+    gap: var(--space-7);
+  }
+
+  /* 桌面：正文与侧栏两栏；移动端自动堆叠（AC2.3 不出现横向滚动） */
+  @media (min-width: 900px) {
+    .about-grid {
+      grid-template-columns: minmax(0, 1fr) 260px;
+      align-items: start;
+    }
+  }
+
+  .about-aside {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+  }
+
+  .meta-list {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: var(--space-2) var(--space-4);
+    font-size: var(--text-sm);
+  }
+
+  .meta-list dt {
+    color: var(--text-muted);
+  }
+
+  .meta-list dd {
+    color: var(--text-secondary);
+  }
+</style>

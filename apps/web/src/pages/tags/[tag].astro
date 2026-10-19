@@ -1,0 +1,84 @@
+---
+/**
+ * 标签聚合页（PRD §3.1 / F4）。
+ * 文章与项目共用标签，所以这里同时列出两类内容（TECH_DESIGN §3.1 原则 3 的直接收益）。
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PostItem from '../../components/PostItem.astro';
+import ProjectCard from '../../components/ProjectCard.astro';
+import EmptyState from '../../components/EmptyState.astro';
+import { loadProjectList, loadPostList, loadSiteContext, loadTag } from '../../lib/server/content';
+
+const { tag: tagSlug } = Astro.params;
+const { settings, profile } = await loadSiteContext();
+const tag = tagSlug ? await loadTag(tagSlug) : null;
+
+if (!tag) {
+  return Astro.rewrite('/404');
+}
+
+const [postList, projectList] = await Promise.all([
+  loadPostList({ page: 1, pageSize: 20, tagSlugs: [tag.slug] }),
+  loadProjectList({ page: 1, pageSize: 12, tagSlugs: [tag.slug] }),
+]);
+
+const hasAnyContent = postList.items.length > 0 || projectList.items.length > 0;
+---
+
+<BaseLayout
+  title={`标签：${tag.name}`}
+  description={`与「${tag.name}」相关的文章与项目。`}
+  currentPath={`/tags/${tag.slug}`}
+  settings={settings}
+  profile={profile}
+>
+  <div class="container">
+    <header class="page-head">
+      <h1 class="page-head__title">{tag.name}</h1>
+      <p class="page-head__lead">
+        {postList.total} 篇文章 · {projectList.total} 个项目
+      </p>
+    </header>
+
+    {
+      !hasAnyContent && (
+        <EmptyState
+          title="这个标签下还没有内容"
+          text="标签会随文章与项目的标签设置自动出现。"
+          actionHref="/blog"
+          actionLabel="浏览全部文章"
+        />
+      )
+    }
+
+    {
+      postList.items.length > 0 && (
+        <section class="section section--tight" aria-labelledby="tag-posts-heading">
+          <h2 class="section-heading__title" id="tag-posts-heading">
+            文章
+          </h2>
+          <div class="post-list">
+            {postList.items.map((post) => (
+              <PostItem post={post} />
+            ))}
+          </div>
+        </section>
+      )
+    }
+
+    {
+      projectList.items.length > 0 && (
+        <section class="section section--tight" aria-labelledby="tag-projects-heading">
+          <h2 class="section-heading__title" id="tag-projects-heading">
+            项目
+          </h2>
+          <div class="grid-cards grid-cards--three">
+            {projectList.items.map((project) => (
+              <ProjectCard project={project} />
+            ))}
+          </div>
+        </section>
+      )
+    }
+  </div>
+</BaseLayout>

@@ -1,0 +1,17 @@
+# 本地开发环境变量样例。使用时复制为 .dev.vars 并填入真实值。
+# ⚠️ .dev.vars 已在 .gitignore 中，绝不要把真实值提交进仓库。
+
+# Cloudflare Access 二次校验用（Access 边缘已经挡了一层，应用内仍要独立校验 JWT）
+ACCESS_TEAM_DOMAIN=https://your-team.cloudflareaccess.com
+ACCESS_JWT_AUD=your-access-application-aud-tag
+
+# 站点对外地址（用于 RSS / sitemap 生成绝对链接）
+SITE_URL=https://example.workers.dev
+
+# 本地开发放行开关：仅在显式设为 "1" 时，才允许在没有 Access 的环境中访问后台接口。
+# 生产环境必须保持不设置（默认关闭）。
+ALLOW_LOCAL_ADMIN=
+
+# 留言 IP 哈希的盐值：数据库里只存哈希，不存明文 IP。
+# 请用一段随机字符串，不要沿用示例值。
+MESSAGE_IP_SALT=replace-with-a-random-string

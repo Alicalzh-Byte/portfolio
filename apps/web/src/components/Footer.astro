@@ -1,0 +1,75 @@
+---
+/**
+ * 页脚（PRD §3.2：品牌区 + 链接列 + 版权声明）。
+ * 文案与社交链接全部来自 D1（settings / profile），不硬编码内容。
+ */
+import type { SocialLink } from '@portfolio/shared/types';
+
+interface Props {
+  siteTitle?: string | null;
+  siteSubtitle?: string | null;
+  footerText?: string | null;
+  socialLinks?: SocialLink[];
+  emailHref?: string | null;
+}
+
+const {
+  siteTitle = null,
+  siteSubtitle = null,
+  footerText = null,
+  socialLinks = [],
+  emailHref = null,
+} = Astro.props;
+
+const currentYear = new Date().getFullYear();
+
+const SITE_LINKS = [
+  { href: '/about', label: '关于' },
+  { href: '/projects', label: '项目' },
+  { href: '/blog', label: '博客' },
+  { href: '/contact', label: '联系' },
+];
+---
+
+<footer class="footer">
+  <div class="container">
+    <div class="footer__inner">
+      <div>
+        {siteTitle && <p class="footer__title">{siteTitle}</p>}
+        {siteSubtitle && <p class="footer__text">{siteSubtitle}</p>}
+        {!siteTitle && !siteSubtitle && <p class="footer__text">—</p>}
+      </div>
+
+      <div>
+        <p class="footer__col-title">导航</p>
+        <div class="footer__links">
+          {SITE_LINKS.map((item) => <a href={item.href}>{item.label}</a>)}
+        </div>
+      </div>
+
+      <div>
+        <p class="footer__col-title">订阅与联系</p>
+        <div class="footer__links">
+          <a href="/rss.xml">RSS 订阅</a>
+          {
+            // 外链一律 rel="noopener"（PRD AC1.4）
+            socialLinks.map((link) => (
+              <a href={link.url} target="_blank" rel="noopener noreferrer">
+                {link.label}
+              </a>
+            ))
+          }
+          {emailHref && <a href={emailHref}>邮件联系</a>}
+        </div>
+      </div>
+    </div>
+
+    <div class="footer__bottom">
+      <span>
+        {footerText ? `${footerText} · ` : ''}© {currentYear}
+        {siteTitle ? ` ${siteTitle}` : ''}
+      </span>
+      <span>本站内容由后台维护 · 数据存于 Cloudflare D1</span>
+    </div>
+  </div>
+</footer>

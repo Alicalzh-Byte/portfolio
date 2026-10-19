@@ -1,0 +1,18 @@
+node_modules/
+dist/
+.astro/
+.wrangler/
+.vite/
+playwright-report/
+test-results/
+coverage/
+
+# 本地环境变量与密钥：一律不进仓库（只保留 .dev.vars.example）
+.dev.vars
+.env
+.env.*
+
+# 编辑器与系统
+.DS_Store
+Thumbs.db
+*.log

@@ -1,0 +1,768 @@
+/**
+ * 组件样式。全部引用 tokens.css 的变量，不写魔法数字（AGENTS.md §5.4）。
+ * 选择器保持扁平；移动优先，用 min-width 断点增强。
+ */
+
+/* ---------------- 导航栏（PRD §5.6：吸顶 + 滚动后毛玻璃） ---------------- */
+
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-nav);
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  transition:
+    background var(--dur-state) var(--ease-standard),
+    border-color var(--dur-state) var(--ease-standard);
+}
+
+/* 由 BaseLayout 的脚本在滚动后加上 .is-scrolled */
+.nav.is-scrolled {
+  background: rgba(10, 11, 20, 0.72);
+  backdrop-filter: blur(12px) saturate(140%);
+  border-bottom-color: var(--border-subtle);
+}
+
+/* 不支持 backdrop-filter 的浏览器回退为不透明底色，否则文字会压在星空上看不清 */
+@supports not (backdrop-filter: blur(12px)) {
+  .nav.is-scrolled {
+    background: var(--bg-elev-1);
+  }
+}
+
+.nav__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-height: var(--nav-height);
+}
+
+.nav__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.nav__mark {
+  width: 26px;
+  height: 26px;
+  flex: none;
+}
+
+.nav__links {
+  display: none;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.nav__link {
+  display: inline-flex;
+  align-items: center;
+  /* 触控目标 ≥ 44×44（PRD AC8.2） */
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  transition:
+    color var(--dur-state) var(--ease-standard),
+    background var(--dur-state) var(--ease-standard);
+}
+
+.nav__link:hover {
+  color: var(--text-primary);
+  background: var(--bg-elev-1);
+}
+
+.nav__link[aria-current='page'] {
+  color: var(--text-primary);
+  background: var(--bg-elev-2);
+}
+
+/* 移动端菜单按钮 */
+.nav__toggle {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev-1);
+  cursor: pointer;
+}
+
+.nav__toggle-lines {
+  position: relative;
+  width: 18px;
+  height: 2px;
+  background: var(--text-primary);
+  border-radius: 2px;
+}
+
+.nav__toggle-lines::before,
+.nav__toggle-lines::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  width: 18px;
+  height: 2px;
+  background: var(--text-primary);
+  border-radius: 2px;
+}
+
+.nav__toggle-lines::before {
+  top: -6px;
+}
+
+.nav__toggle-lines::after {
+  top: 6px;
+}
+
+/* 移动端展开的抽屉 */
+.nav__drawer {
+  display: none;
+  padding-block: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.nav__drawer[data-open='true'] {
+  display: block;
+}
+
+.nav__drawer-links {
+  display: flex;
+  flex-direction: column;
+}
+
+.nav__drawer-links .nav__link {
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+}
+
+@media (min-width: 768px) {
+  .nav__links {
+    display: flex;
+  }
+
+  .nav__toggle,
+  .nav__drawer {
+    display: none !important;
+  }
+}
+
+/* ---------------- 按钮（PRD §5.6） ---------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: 0 var(--space-5);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    transform var(--dur-state) var(--ease-standard),
+    box-shadow var(--dur-state) var(--ease-standard),
+    border-color var(--dur-state) var(--ease-standard);
+}
+
+.btn--primary {
+  background: var(--accent-gradient);
+  color: #0a0b14;
+}
+
+.btn--ghost {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  background: transparent;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+}
+
+.btn--primary:hover {
+  box-shadow: var(--shadow-md);
+  color: #0a0b14;
+}
+
+.btn--ghost:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.btn[disabled],
+.btn[aria-disabled='true'] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* ---------------- Hero ---------------- */
+
+.hero {
+  padding-block: clamp(var(--space-8), 12vw, var(--space-10)) clamp(var(--space-7), 8vw, var(--space-9));
+}
+
+.hero__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elev-1);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.hero__title {
+  margin-top: var(--space-4);
+  font-size: var(--text-page-title);
+  letter-spacing: -0.02em;
+}
+
+.hero__headline {
+  margin-top: var(--space-4);
+  max-width: var(--measure);
+  color: var(--text-secondary);
+  font-size: clamp(16px, 1vw + 13px, 20px);
+}
+
+.hero__cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+.hero__grid {
+  display: grid;
+  gap: var(--space-8);
+}
+
+@media (min-width: 1024px) {
+  .hero__grid {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+    align-items: center;
+  }
+}
+
+/* 头像：缺失时由首字母占位块顶上，避免破图（PRD AC1.3） */
+.avatar {
+  position: relative;
+  display: grid;
+  width: clamp(120px, 18vw, 168px);
+  aspect-ratio: 1;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elev-1);
+  box-shadow: var(--shadow-md);
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar__initial {
+  font-size: clamp(40px, 6vw, 56px);
+  font-weight: 650;
+  color: var(--text-secondary);
+}
+
+/* ---------------- 区块标题 ---------------- */
+
+.section-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.section-heading__title {
+  font-size: var(--text-section-title);
+  letter-spacing: -0.01em;
+}
+
+.section-heading__hint {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+/* ---------------- 卡片与网格（PRD §5.6 / §5.9：1 → 2 → 3 列） ---------------- */
+
+.grid-cards {
+  display: grid;
+  gap: var(--space-5);
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 768px) {
+  .grid-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .grid-cards--three {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-elev-1);
+  box-shadow: var(--shadow-sm);
+  transition:
+    transform var(--dur-state) var(--ease-standard),
+    box-shadow var(--dur-state) var(--ease-standard);
+}
+
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+}
+
+.card__media {
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  background: var(--bg-elev-2);
+  object-fit: cover;
+}
+
+.card__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+}
+
+.card__title {
+  font-size: var(--text-card-title);
+}
+
+.card__summary {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-top: auto;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+/* 列表页的条目行（文章） */
+.post-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.post-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-elev-1);
+  transition:
+    border-color var(--dur-state) var(--ease-standard),
+    transform var(--dur-state) var(--ease-standard);
+}
+
+.post-item:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-2px);
+}
+
+.post-item__title {
+  font-size: var(--text-card-title);
+}
+
+.post-item__summary {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.post-item__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+/* ---------------- 标签胶囊（PRD §5.6） ---------------- */
+
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elev-2);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  transition:
+    color var(--dur-state) var(--ease-standard),
+    background var(--dur-state) var(--ease-standard);
+}
+
+a.tag:hover,
+.tag[aria-pressed='true'] {
+  background: var(--accent);
+  color: #0a0b14;
+}
+
+/* 状态徽标 */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.badge--accent {
+  border-color: rgba(124, 92, 255, 0.4);
+  color: var(--accent);
+}
+
+/* ---------------- 技能（PRD §5.6 分组卡片 + 胶囊） ---------------- */
+
+.skill-groups {
+  display: grid;
+  gap: var(--space-5);
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 768px) {
+  .skill-groups {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.skill-group {
+  padding: var(--space-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-elev-1);
+}
+
+.skill-group__title {
+  margin-bottom: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.skill-group__items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* 有熟练度时用点阵表示，不用浮夸的百分比（PRD F2） */
+.skill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elev-2);
+  font-size: var(--text-sm);
+}
+
+.skill__dots {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.skill__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+
+.skill__dot--on {
+  background: var(--accent-2);
+}
+
+/* ---------------- 时间线（PRD §5.6：桌面两栏，移动上下） ---------------- */
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.timeline__item {
+  display: grid;
+  gap: var(--space-2);
+  padding-left: var(--space-5);
+  border-left: 1px solid var(--border-subtle);
+}
+
+.timeline__period {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.timeline__title {
+  font-size: var(--text-card-title);
+}
+
+.timeline__desc {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+@media (min-width: 768px) {
+  .timeline__item {
+    grid-template-columns: 140px minmax(0, 1fr);
+    column-gap: var(--space-5);
+  }
+
+  .timeline__period {
+    grid-row: span 2;
+  }
+}
+
+/* ---------------- 空状态（PRD §5.6：每个列表都要有） ---------------- */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: clamp(var(--space-7), 8vw, var(--space-9)) var(--space-5);
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-elev-1) 60%, transparent);
+  text-align: center;
+}
+
+.empty-state__icon {
+  color: var(--text-muted);
+}
+
+.empty-state__title {
+  font-size: var(--text-card-title);
+}
+
+.empty-state__text {
+  max-width: 46ch;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+/* ---------------- 分页 ---------------- */
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  margin-top: var(--space-7);
+}
+
+.pagination__status {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+/* ---------------- 页脚 ---------------- */
+
+.footer {
+  margin-top: var(--space-9);
+  border-top: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-elev-1) 55%, transparent);
+}
+
+.footer__inner {
+  display: grid;
+  gap: var(--space-6);
+  padding-block: var(--space-7);
+}
+
+@media (min-width: 768px) {
+  .footer__inner {
+    grid-template-columns: minmax(0, 1.4fr) repeat(2, minmax(0, 1fr));
+  }
+}
+
+.footer__title {
+  font-size: var(--text-card-title);
+}
+
+.footer__text {
+  margin-top: var(--space-2);
+  max-width: 40ch;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.footer__col-title {
+  margin-bottom: var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.footer__links {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.footer__links a {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.footer__bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-block: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+/* ---------------- 表单（PRD §5.6） ---------------- */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.field__label {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.field__control {
+  min-height: 44px;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev-1);
+  transition:
+    border-color var(--dur-state) var(--ease-standard),
+    box-shadow var(--dur-state) var(--ease-standard);
+}
+
+textarea.field__control {
+  min-height: 132px;
+  resize: vertical;
+}
+
+.field__control:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.2);
+  outline: none;
+}
+
+.field__control[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.field__error {
+  color: var(--danger);
+  font-size: var(--text-xs);
+}
+
+.field__hint {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+/* 蜜罐字段：对真人不可见，但爬虫会填（AC6.2）。不可用 display:none —— 部分爬虫会跳过隐藏元素 */
+.honeypot {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+/* ---------------- 页面标题区 ---------------- */
+
+.page-head {
+  padding-block: clamp(var(--space-7), 8vw, var(--space-9)) var(--space-6);
+}
+
+.page-head__title {
+  font-size: var(--text-page-title);
+  letter-spacing: -0.02em;
+}
+
+.page-head__lead {
+  margin-top: var(--space-3);
+  max-width: var(--measure);
+  color: var(--text-secondary);
+}
+
+/* ---------------- 工具栏（筛选器） ---------------- */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+.toolbar__label {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}

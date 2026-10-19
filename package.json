@@ -1,0 +1,39 @@
+{
+  "name": "portfolio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "个人展示网站（个人介绍 / 技能 / 项目 / 博客）· 深色星空主题",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@12.14.0",
+  "scripts": {
+    "dev": "pnpm --filter @portfolio/web dev",
+    "preview": "wrangler dev --config apps/web/dist/server/wrangler.json --persist-to .wrangler/state",
+    "build": "pnpm --filter @portfolio/shared build && pnpm --filter @portfolio/web build && pnpm --filter @portfolio/admin build && tsx scripts/copy-admin.ts",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "typecheck": "pnpm -r typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "db:migrate:local": "wrangler d1 migrations apply portfolio-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply portfolio-db --remote",
+    "db:seed": "tsx scripts/seed.ts"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261018.1",
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.1",
+    "@portfolio/shared": "workspace:*",
+    "eslint": "^10.13.0",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.10",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.2",
+    "vitest": "^5.0.5",
+    "wrangler": "^4.151.1"
+  }
+}

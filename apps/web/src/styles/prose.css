@@ -1,0 +1,173 @@
+/**
+ * 长文排版（文章正文 / 项目正文）。
+ * 正文宽度 68ch、行高 1.75，保证中文长段落阅读舒适（PRD §5.3）。
+ */
+
+.prose {
+  max-width: var(--measure);
+  color: var(--text-primary);
+}
+
+.prose > * + * {
+  margin-top: var(--space-5);
+}
+
+.prose h2,
+.prose h3,
+.prose h4 {
+  margin-top: var(--space-7);
+  scroll-margin-top: calc(var(--nav-height) + var(--space-4));
+}
+
+.prose h2 {
+  font-size: var(--text-section-title);
+}
+
+.prose h3 {
+  font-size: var(--text-card-title);
+}
+
+.prose p,
+.prose li {
+  color: var(--text-secondary);
+  line-height: var(--leading-body);
+}
+
+/* 正文用 --text-secondary 而非 --text-muted：后者对比度不足以承载正文（PRD §5.2 硬性约束） */
+.prose strong {
+  color: var(--text-primary);
+}
+
+.prose ul,
+.prose ol {
+  padding-left: 1.4em;
+}
+
+.prose li + li {
+  margin-top: var(--space-2);
+}
+
+.prose a {
+  color: var(--accent-2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.prose blockquote {
+  padding-left: var(--space-5);
+  border-left: 3px solid var(--accent);
+  color: var(--text-secondary);
+}
+
+.prose hr {
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.prose img {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+
+/* 行内代码 */
+.prose code {
+  padding: 2px var(--space-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-elev-2);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+/**
+ * 代码块：独立横向滚动，不撑破布局（PRD AC3.3 / AC4.5）。
+ * 这里必须让 <pre> 自己成为滚动容器；若让外层容器滚动，整页会出现横向滚动条。
+ */
+.prose pre {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: var(--space-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-elev-2) !important;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  /* 触屏上横向滚动更顺手 */
+  -webkit-overflow-scrolling: touch;
+}
+
+.prose pre code {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: inherit;
+}
+
+/* Shiki 高亮产出的 span 带上自己的内联颜色，这里只统一字体 */
+.prose pre span {
+  font-family: var(--font-mono);
+}
+
+/* 表格：宽表同样横向滚动，不挤压列宽 */
+.prose table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.prose th,
+.prose td {
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--border-subtle);
+  text-align: left;
+}
+
+.prose th {
+  background: var(--bg-elev-2);
+  color: var(--text-primary);
+}
+
+/* ---------------- 文章目录 ---------------- */
+
+.toc {
+  padding: var(--space-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-elev-1);
+}
+
+.toc__title {
+  margin-bottom: var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.toc__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+}
+
+.toc__link {
+  color: var(--text-secondary);
+}
+
+.toc__link:hover {
+  color: var(--accent-2);
+}
+
+.toc__item--3 {
+  padding-left: var(--space-4);
+}
+
+.toc__item--4,
+.toc__item--5,
+.toc__item--6 {
+  padding-left: var(--space-6);
+}

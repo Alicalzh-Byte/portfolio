@@ -1,0 +1,136 @@
+---
+/**
+ * 基础布局：文档头、星空、导航、主体、页脚、进入动画。
+ *
+ * 关键决策：
+ * - `html { background: #0a0b14 }` 是内联的：深色站点若等外部 CSS 到达才上色，
+ *   首帧会闪白（TECH_DESIGN §4.4）。
+ * - 站点名、社交链接、页脚文案全部由 D1 注入（props），不硬编码。
+ */
+import type { Profile, Settings } from '@portfolio/shared/types';
+import Nav from '../components/Nav.astro';
+import Footer from '../components/Footer.astro';
+import StarField from '../components/StarField.astro';
+import { mailtoHref } from '../lib/format';
+import '../styles/tokens.css';
+import '../styles/base.css';
+import '../styles/components.css';
+import '../styles/prose.css';
+
+interface Props {
+  title: string;
+  description?: string;
+  currentPath: string;
+  /** 站点级设置（来自 D1 settings）；缺数据时为 null */
+  settings?: Settings | null;
+  /** 个人信息（用于页脚社交链接）；缺数据时为 null */
+  profile?: Profile | null;
+  /** 文章/项目详情页传 true，降低星空亮度 */
+  dimStars?: boolean;
+  /** 后台与 404 页设为 true，不参与搜索引擎收录 */
+  noIndex?: boolean;
+}
+
+const {
+  title,
+  description = '',
+  currentPath,
+  settings = null,
+  profile = null,
+  dimStars = false,
+  noIndex = false,
+} = Astro.props;
+
+const siteTitle = settings?.siteTitle ?? null;
+const pageTitle = siteTitle ? `${title} · ${siteTitle}` : title;
+const canonicalUrl = Astro.site ? new URL(Astro.url.pathname, Astro.site).toString() : Astro.url.pathname;
+const socialLinks = profile?.socialLinks ?? [];
+---
+
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{pageTitle}</title>
+    {description && <meta name="description" content={description} />}
+
+    <!-- 深色站点：这两条能让浏览器 UI 与首帧都保持深色，消除白闪 -->
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0a0b14" />
+    <style>
+      html {
+        background: #0a0b14;
+      }
+    </style>
+
+    {noIndex && <meta name="robots" content="noindex, nofollow" />}
+    <link rel="canonical" href={canonicalUrl} />
+    <link rel="alternate" type="application/rss+xml" title="RSS" href="/rss.xml" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={pageTitle} />
+    {description && <meta property="og:description" content={description} />}
+    <meta property="og:url" content={canonicalUrl} />
+    <meta name="twitter:card" content="summary_large_image" />
+  </head>
+
+  <body>
+    <!-- 键盘用户的第一个 Tab 目标是「跳到主内容」，避免逐个 Tab 过导航 -->
+    <a class="skip-link" href="#main">跳到主内容</a>
+
+    <StarField dim={dimStars} />
+
+    <div class="page-shell">
+      <Nav siteTitle={siteTitle} currentPath={currentPath} />
+
+      <main id="main">
+        <slot />
+      </main>
+
+      <Footer
+        siteTitle={siteTitle}
+        siteSubtitle={settings?.siteSubtitle ?? null}
+        footerText={settings?.footerText ?? null}
+        socialLinks={socialLinks}
+        emailHref={mailtoHref(profile?.email)}
+      />
+    </div>
+
+    <script>
+      /**
+       * 进入动画：只给「首屏之外的区块」加错峰淡入（PRD §5.7：滚动进入，仅一次，位移 ≤16px）。
+       *
+       * 必须保留的降级：prefers-reduced-motion 下直接加终态类，
+       * 否则元素会停在 opacity: 0 —— 即「关了动效就白屏」。
+       */
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      if (reduceMotion || !('IntersectionObserver' in window)) {
+        document.querySelectorAll('.reveal').forEach((element) => {
+          element.classList.add('is-visible');
+        });
+      } else {
+        const observer = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (!entry.isIntersecting) return;
+              entry.target.classList.add('is-visible');
+              // 只触发一次，避免上下滚动时反复播放
+              observer.unobserve(entry.target);
+            });
+          },
+          { rootMargin: '0px 0px -12% 0px', threshold: 0.08 },
+        );
+
+        document.querySelectorAll('.reveal').forEach((element, index) => {
+          // 错峰上限 6 级，防止长列表里最后一个元素要等很久才出现
+          const step = Math.min(index, 6);
+          element.style.transitionDelay = `${step * 60}ms`;
+          observer.observe(element);
+        });
+      }
+    </script>
+  </body>
+</html>

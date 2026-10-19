@@ -1,0 +1,36 @@
+---
+/**
+ * 空状态（PRD §5.6：每个列表都要有，禁止出现纯空白或报错）。
+ * 展示与文案都在这里收口，避免各页面各写一句风格不一的「暂无数据」。
+ */
+interface Props {
+  title: string;
+  text?: string;
+  /** 可选的操作入口 */
+  actionHref?: string;
+  actionLabel?: string;
+}
+
+const { title, text = '', actionHref = null, actionLabel = null } = Astro.props;
+---
+
+<div class="empty-state">
+  <svg
+    class="empty-state__icon"
+    width="40"
+    height="40"
+    viewBox="0 0 40 40"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.4"
+    aria-hidden="true"
+  >
+    <circle cx="20" cy="20" r="15" stroke-dasharray="3 4"></circle>
+    <path d="M20 13v10M20 27h.01" stroke-linecap="round"></path>
+  </svg>
+
+  <p class="empty-state__title">{title}</p>
+  {text && <p class="empty-state__text">{text}</p>}
+
+  {actionHref && actionLabel && <a class="btn btn--ghost" href={actionHref}>{actionLabel}</a>}
+</div>

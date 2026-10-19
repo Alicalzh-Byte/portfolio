@@ -1,0 +1,231 @@
+---
+/**
+ * 联系页（PRD F6 / AC6.*）。
+ *
+ * 表单提交走 POST /api/messages，服务端做 Zod 校验 + 蜜罐 + 频率限制。
+ * 前端这里只做「提交中 / 成功 / 失败保留输入」三态，不用任何表单库。
+ */
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { loadSiteContext } from '../lib/server/content';
+import { mailtoHref, mediaUrl } from '../lib/format';
+
+const { settings, profile } = await loadSiteContext();
+
+const hidden = new Set(profile?.hiddenFields ?? []);
+const emailHref = mailtoHref(profile?.email);
+const showEmail = Boolean(profile?.email) && !hidden.has('email');
+const resumeUrl = profile?.resumeKey ? mediaUrl(profile.resumeKey) : null;
+---
+
+<BaseLayout
+  title="联系"
+  description="通过表单或邮件与我取得联系。"
+  currentPath="/contact"
+  settings={settings}
+  profile={profile}
+>
+  <div class="container">
+    <header class="page-head">
+      <h1 class="page-head__title">联系</h1>
+      <p class="page-head__lead">
+        {settings?.siteSubtitle ?? '有合作、交流或反馈，都可以在这里留言，或者直接发邮件。'}
+      </p>
+    </header>
+
+    <div class="contact-grid">
+      <section aria-labelledby="message-form-heading">
+        <h2 class="section-heading__title" id="message-form-heading">留言</h2>
+
+        <form class="form" data-message-form novalidate>
+          <div class="field">
+            <label class="field__label" for="message-name">称呼<span aria-hidden="true"> *</span></label>
+            <input
+              class="field__control"
+              id="message-name"
+              name="name"
+              type="text"
+              maxlength="60"
+              required
+              autocomplete="name"
+              aria-describedby="message-name-error"
+            />
+            <p class="field__error" id="message-name-error" hidden></p>
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="message-email">邮箱<span aria-hidden="true"> *</span></label>
+            <input
+              class="field__control"
+              id="message-email"
+              name="email"
+              type="email"
+              maxlength="254"
+              required
+              autocomplete="email"
+              aria-describedby="message-email-error"
+            />
+            <p class="field__error" id="message-email-error" hidden></p>
+            <p class="field__hint">仅用于回复你，不会公开显示。</p>
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="message-subject">主题</label>
+            <input
+              class="field__control"
+              id="message-subject"
+              name="subject"
+              type="text"
+              maxlength="120"
+              aria-describedby="message-subject-error"
+            />
+            <p class="field__error" id="message-subject-error" hidden></p>
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="message-body">内容<span aria-hidden="true"> *</span></label>
+            <textarea
+              class="field__control"
+              id="message-body"
+              name="body"
+              maxlength="2000"
+              required
+              aria-describedby="message-body-error"
+            ></textarea>
+            <p class="field__error" id="message-body-error" hidden></p>
+          </div>
+
+          {/*
+            蜜罐字段：真人看不见，脚本会去填。用绝对定位移出视口而不是 display:none ——
+            部分爬虫会跳过隐藏元素。服务端收到非空值即判定为垃圾。
+          */}
+          <div class="honeypot" aria-hidden="true">
+            <label for="message-website">网址</label>
+            <input id="message-website" name="website" type="text" tabindex="-1" autocomplete="off" />
+          </div>
+
+          <div style="display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4)">
+            <button class="btn btn--primary" type="submit" data-submit>发送留言</button>
+            <p class="field__hint" role="status" aria-live="polite" data-form-status></p>
+          </div>
+        </form>
+      </section>
+
+      <aside class="contact-side">
+        <h2 class="section-heading__title">其他方式</h2>
+        <div class="stack">
+          {showEmail && emailHref && <a class="btn btn--ghost" href={emailHref}>发送邮件</a>}
+          {resumeUrl && <a class="btn btn--ghost" href={resumeUrl} download>下载简历</a>}
+          {
+            profile?.socialLinks.map((link) => (
+              <a class="btn btn--ghost" href={link.url} target="_blank" rel="noopener noreferrer">
+                {link.label}
+              </a>
+            ))
+          }
+        </div>
+      </aside>
+    </div>
+  </div>
+</BaseLayout>
+
+<style>
+  .contact-grid {
+    display: grid;
+    gap: var(--space-8);
+    margin-bottom: var(--space-9);
+  }
+
+  @media (min-width: 900px) {
+    .contact-grid {
+      grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.7fr);
+      align-items: start;
+    }
+  }
+
+  .contact-side {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+</style>
+
+<script>
+  /**
+   * 留言表单：原生 fetch + 三态反馈。
+   * 关键点（AGENTS.md §4.7）：失败时必须**保留用户输入**，并标出出错字段。
+   */
+  const form = document.querySelector('[data-message-form]');
+  if (form instanceof HTMLFormElement) {
+    const submitButton = form.querySelector('[data-submit]');
+    const statusText = form.querySelector('[data-form-status]');
+
+    const setStatus = (message, tone) => {
+      if (!(statusText instanceof HTMLElement)) return;
+      statusText.textContent = message;
+      statusText.style.color = tone === 'error' ? 'var(--danger)' : 'var(--success)';
+    };
+
+    const clearFieldErrors = () => {
+      form.querySelectorAll('.field__error').forEach((element) => {
+        element.hidden = true;
+        element.textContent = '';
+      });
+      form.querySelectorAll('[aria-invalid]').forEach((element) => {
+        element.removeAttribute('aria-invalid');
+      });
+    };
+
+    const showFieldErrors = (fields) => {
+      for (const [field, message] of Object.entries(fields ?? {})) {
+        const errorElement = form.querySelector(`#message-${field}-error`);
+        const inputElement = form.querySelector(`#message-${field}`);
+        if (errorElement instanceof HTMLElement) {
+          errorElement.hidden = false;
+          errorElement.textContent = message;
+        }
+        if (inputElement instanceof HTMLElement) {
+          // aria-invalid 让屏幕阅读器能读出「这个字段出错了」
+          inputElement.setAttribute('aria-invalid', 'true');
+        }
+      }
+    };
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      clearFieldErrors();
+
+      if (submitButton instanceof HTMLButtonElement) {
+        submitButton.disabled = true;
+        submitButton.textContent = '发送中…';
+      }
+      setStatus('正在提交…', 'info');
+
+      const payload = Object.fromEntries(new FormData(form).entries());
+
+      try {
+        const response = await fetch('/api/messages', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const result = await response.json();
+
+        if (result.ok) {
+          form.reset();
+          setStatus('留言已收到，我会尽快回复。', 'success');
+        } else {
+          // 失败时保留输入，只提示错误 —— 清空表单等于让用户重打一遍
+          showFieldErrors(result.error?.fields);
+          setStatus(result.error?.message ?? '提交失败，请稍后再试。', 'error');
+        }
+      } catch {
+        setStatus('网络异常，请稍后再试。', 'error');
+      } finally {
+        if (submitButton instanceof HTMLButtonElement) {
+          submitButton.disabled = false;
+          submitButton.textContent = '发送留言';
+        }
+      }
+    });
+  }
+</script>

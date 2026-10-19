@@ -1,0 +1,48 @@
+---
+/** 分页器。URL 由调用方拼好（保留标签筛选等查询参数），这里只负责渲染与可达性。 */
+interface Props {
+  page: number;
+  totalPages: number;
+  /** 生成第 N 页的链接 */
+  hrefFor: (page: number) => string;
+}
+
+const { page, totalPages, hrefFor } = Astro.props;
+
+const hasPrevious = page > 1;
+const hasNext = page < totalPages;
+---
+
+{
+  totalPages > 1 && (
+    <nav class="pagination" aria-label="分页导航">
+      {
+        hasPrevious ? (
+          <a class="btn btn--ghost" href={hrefFor(page - 1)} rel="prev">
+            上一页
+          </a>
+        ) : (
+          <span class="btn btn--ghost" aria-disabled="true">
+            上一页
+          </span>
+        )
+      }
+
+      <span class="pagination__status tabular">
+        第 {page} / {totalPages} 页
+      </span>
+
+      {
+        hasNext ? (
+          <a class="btn btn--ghost" href={hrefFor(page + 1)} rel="next">
+            下一页
+          </a>
+        ) : (
+          <span class="btn btn--ghost" aria-disabled="true">
+            下一页
+          </span>
+        )
+      }
+    </nav>
+  )
+}

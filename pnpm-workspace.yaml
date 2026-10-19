@@ -1,0 +1,10 @@
+# 单仓库多包：共享包 + 公开站点 + 后台
+packages:
+  - 'packages/*'
+  - 'apps/*'
+
+# pnpm 默认阻止依赖的安装脚本执行；下面这些必须在安装时构建，否则二进制缺失会导致构建失败。
+# esbuild 需要 postinstall 下载平台二进制；workerd 是 wrangler/miniflare 的运行时。
+allowBuilds:
+  esbuild: true
+  workerd: true

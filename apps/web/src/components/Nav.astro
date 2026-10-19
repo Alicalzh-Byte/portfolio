@@ -1,0 +1,118 @@
+---
+/**
+ * 站点导航栏（PRD §5.6：吸顶 + 滚动后毛玻璃 + 当前区块高亮）。
+ *
+ * 链接是静态的路由结构（站点地图本身不随内容变化），
+ * 但品牌名来自 D1 的 settings —— 不允许把站点名硬编码进模板。
+ */
+interface Props {
+  /** 站点标题，来自 D1 settings；为空时只显示图形标记，不渲染占位文案 */
+  siteTitle?: string | null;
+  currentPath: string;
+}
+
+const { siteTitle = null, currentPath } = Astro.props;
+
+const NAV_ITEMS = [
+  { href: '/', label: '首页' },
+  { href: '/about', label: '关于' },
+  { href: '/projects', label: '项目' },
+  { href: '/blog', label: '博客' },
+  { href: '/contact', label: '联系' },
+];
+
+function isCurrent(href: string): boolean {
+  if (href === '/') return currentPath === '/';
+  return currentPath === href || currentPath.startsWith(`${href}/`) || currentPath.startsWith(href);
+}
+---
+
+<header class="nav" data-nav>
+  <div class="container nav__inner">
+    <a class="nav__brand" href="/" aria-label={siteTitle ? `${siteTitle} 首页` : '返回首页'}>
+      <!-- 品牌标记：内联 SVG，不加载图片文件，避免额外请求与闪烁 -->
+      <svg class="nav__mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+        <defs>
+          <linearGradient id="nav-mark-gradient" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#7c5cff"></stop>
+            <stop offset="1" stop-color="#22d3ee"></stop>
+          </linearGradient>
+        </defs>
+        <circle cx="16" cy="16" r="14" fill="none" stroke="url(#nav-mark-gradient)" stroke-width="1.6"></circle>
+        <path d="M16 6.5 L18.4 13.6 L25.5 16 L18.4 18.4 L16 25.5 L13.6 18.4 L6.5 16 L13.6 13.6 Z" fill="url(#nav-mark-gradient)"></path>
+      </svg>
+      {siteTitle && <span>{siteTitle}</span>}
+    </a>
+
+    <nav class="nav__links" aria-label="主导航">
+      {
+        NAV_ITEMS.map((item) => (
+          <a class="nav__link" href={item.href} aria-current={isCurrent(item.href) ? 'page' : undefined}>
+            {item.label}
+          </a>
+        ))
+      }
+    </nav>
+
+    <button
+      class="nav__toggle"
+      type="button"
+      aria-label="打开导航菜单"
+      aria-expanded="false"
+      aria-controls="nav-drawer"
+      data-nav-toggle
+    >
+      <span class="nav__toggle-lines" aria-hidden="true"></span>
+    </button>
+  </div>
+
+  <div class="container">
+    <div class="nav__drawer" id="nav-drawer" data-open="false">
+      <nav class="nav__drawer-links" aria-label="移动端导航">
+        {
+          NAV_ITEMS.map((item) => (
+            <a class="nav__link" href={item.href} aria-current={isCurrent(item.href) ? 'page' : undefined}>
+              {item.label}
+            </a>
+          ))
+        }
+      </nav>
+    </div>
+  </div>
+</header>
+
+<script>
+  // 吸顶导航滚动态 + 移动端抽屉。都是「状态变化」类动效，符合 PRD §5.7 的克制原则。
+  const header = document.querySelector('[data-nav]');
+  const toggle = document.querySelector('[data-nav-toggle]');
+  const drawer = document.querySelector('.nav__drawer');
+
+  if (header instanceof HTMLElement) {
+    const syncScrolled = () => {
+      header.classList.toggle('is-scrolled', window.scrollY > 8);
+    };
+    syncScrolled();
+    window.addEventListener('scroll', syncScrolled, { passive: true });
+  }
+
+  if (toggle instanceof HTMLButtonElement && drawer instanceof HTMLElement) {
+    const setOpen = (open) => {
+      drawer.dataset.open = String(open);
+      // aria-expanded 必须与视觉状态同步，否则屏幕阅读器会读到错误状态（PRD AC8.3）
+      toggle.setAttribute('aria-expanded', String(open));
+      toggle.setAttribute('aria-label', open ? '关闭导航菜单' : '打开导航菜单');
+    };
+
+    toggle.addEventListener('click', () => {
+      setOpen(drawer.dataset.open !== 'true');
+    });
+
+    // Esc 关闭抽屉并把焦点还给按钮，键盘用户不会「掉进」一个关不掉的面板
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && drawer.dataset.open === 'true') {
+        setOpen(false);
+        toggle.focus();
+      }
+    });
+  }
+</script>

@@ -1,0 +1,88 @@
+/**
+ * 设计令牌（CSS 变量）—— 全站唯一的基础值来源，对齐 PRD §5.2 ~ §5.7。
+ *
+ * 规则（AGENTS.md §5.4）：颜色、间距、圆角、时长一律引用这里的变量，禁止魔法数字。
+ * 新增令牌必须同步 PRD §5 的表格，否则设计与代码会各自漂移。
+ */
+
+:root {
+  /* 让原生控件（滚动条、表单、选择框）跟随深色，避免出现刺眼的白底控件 */
+  color-scheme: dark;
+
+  /* ---------------- 色彩（PRD §5.2） ---------------- */
+  --bg-base: #0a0b14; /* 深空蓝黑，页面底色 */
+  --bg-elev-1: #121421; /* 卡片、浮层 */
+  --bg-elev-2: #1a1d2b; /* 弹窗、悬浮态 */
+  --border-subtle: rgba(255, 255, 255, 0.08); /* 发丝边框 */
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --text-primary: #eceef7;
+  --text-secondary: #a6abc2;
+  --text-muted: #6f7490; /* 仅用于非关键文本，不得用于正文段落 */
+  --accent: #7c5cff;
+  --accent-2: #22d3ee;
+  --accent-gradient: linear-gradient(135deg, #7c5cff, #22d3ee);
+  --danger: #ff6b81;
+  --success: #34d399;
+
+  /* ---------------- 间距（PRD §5.4，4 的倍数） ---------------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --space-9: 96px;
+  --space-10: 128px;
+
+  /* ---------------- 圆角 ---------------- */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-pill: 999px;
+
+  /* 深色下的阴影用「更深 + 轻微发光」替代黑投影，否则阴影会被底色吞掉 */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(124, 92, 255, 0.12);
+  --shadow-lg: 0 18px 48px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(124, 92, 255, 0.18);
+
+  /* ---------------- 字体（PRD §5.3） ---------------- */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+
+  /* 字号阶梯 */
+  --text-page-title: clamp(28px, 4vw, 44px);
+  --text-section-title: clamp(22px, 2.4vw, 30px);
+  --text-card-title: clamp(18px, 1.4vw, 21px);
+  --text-body: clamp(16px, 0.4vw + 15px, 17px);
+  --text-sm: 14px;
+  --text-xs: 13px;
+
+  /* 行高与阅读宽度 */
+  --leading-body: 1.75;
+  --measure: 68ch;
+
+  /* ---------------- 布局（PRD §5.4 / §5.9） ---------------- */
+  --content-max: 1120px;
+  --page-gutter: clamp(16px, 4vw, 48px);
+  --nav-height: 64px;
+
+  /* ---------------- 动效（PRD §5.7） ---------------- */
+  --dur-enter: 280ms;
+  --dur-state: 170ms;
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --stagger-step: 60ms;
+
+  /* ---------------- 层级 ---------------- */
+  --z-stars: 0; /* 星空在最底层 */
+  --z-content: 1;
+  --z-nav: 10;
+  --z-overlay: 20;
+
+  /* ---------------- 星空（PRD §5.5） ---------------- */
+  --star-core: #e8eaf6;
+  --star-opacity-default: 1;
+  --star-opacity-article: 0.45; /* 长文页降低不透明度，避免干扰阅读 */
+}

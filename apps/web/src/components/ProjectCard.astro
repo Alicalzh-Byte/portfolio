@@ -1,0 +1,85 @@
+---
+/**
+ * 项目卡片（PRD F3 / AC3.4：归档项目显示「归档」状态）。
+ * 封面 `loading="lazy"` + 显式宽高，杜绝布局跳动。
+ */
+import type { ProjectSummary } from '@portfolio/shared/types';
+import TagPill from './TagPill.astro';
+import { mediaUrl, projectHref, tagHref } from '../lib/format';
+
+interface Props {
+  project: ProjectSummary;
+  /** 封面尺寸（从 media 表取），用于预留空间避免 CLS；缺省按 16:9 处理 */
+  coverWidth?: number;
+  coverHeight?: number;
+}
+
+const { project, coverWidth, coverHeight } = Astro.props;
+
+const cover = mediaUrl(project.coverKey);
+const STATUS_LABEL: Record<string, string> = {
+  active: '进行中',
+  completed: '已完成',
+  archived: '归档',
+};
+---
+
+<article class="card">
+  <a href={projectHref(project.slug)} aria-label={project.title}>
+    {
+      cover ? (
+        <img
+          class="card__media"
+          src={cover}
+          alt=""
+          width={coverWidth ?? 640}
+          height={coverHeight ?? 360}
+          loading="lazy"
+          decoding="async"
+        />
+      ) : (
+        // 无封面时用带渐变的纯色块占位，而不是留空或破图
+        <div class="card__media card__media--placeholder" aria-hidden="true"></div>
+      )
+    }
+  </a>
+
+  <div class="card__body">
+    <h3 class="card__title">
+      <a href={projectHref(project.slug)}>{project.title}</a>
+    </h3>
+
+    {project.summary && <p class="card__summary">{project.summary}</p>}
+
+    {project.tags.length > 0 && (
+      <div class="tag-row">
+        {project.tags.map((tag) => <TagPill tag={tag} href={tagHref(tag.slug)} />)}
+      </div>
+    )}
+
+    <div class="card__meta">
+      <span class="badge">{STATUS_LABEL[project.status] ?? project.status}</span>
+      {
+        project.repoUrl && (
+          // 外链新窗口 + rel="noopener"：不加 rel 会让对端页面持有 window.opener 引用
+          <a href={project.repoUrl} target="_blank" rel="noopener noreferrer">
+            仓库
+          </a>
+        )
+      }
+      {
+        project.demoUrl && (
+          <a href={project.demoUrl} target="_blank" rel="noopener noreferrer">
+            演示
+          </a>
+        )
+      }
+    </div>
+  </div>
+</article>
+
+<style>
+  .card__media--placeholder {
+    background: linear-gradient(135deg, rgba(124, 92, 255, 0.22), rgba(34, 211, 238, 0.14));
+  }
+</style>

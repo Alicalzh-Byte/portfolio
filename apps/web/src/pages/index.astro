@@ -1,0 +1,209 @@
+---
+/**
+ * 首页（PRD §3.2）：Hero → 技能矩阵 → 精选项目 → 最新文章 → 联系 CTA。
+ *
+ * 所有展示内容都来自 D1。DB 未接上或数据为空时，各区块渲染空状态 ——
+ * 不硬编码任何占位文案进模板（AGENTS.md 最高优先级约束 1）。
+ */
+import BaseLayout from '../layouts/BaseLayout.astro';
+import ProjectCard from '../components/ProjectCard.astro';
+import PostItem from '../components/PostItem.astro';
+import EmptyState from '../components/EmptyState.astro';
+import {
+  loadFeaturedProjects,
+  loadPostList,
+  loadSiteContext,
+  loadSkillGroups,
+} from '../lib/server/content';
+import { mailtoHref, mediaUrl, nameInitial } from '../lib/format';
+
+const { settings, profile } = await loadSiteContext();
+
+const [skillGroups, featuredProjects, latestPosts] = await Promise.all([
+  loadSkillGroups(),
+  loadFeaturedProjects(),
+  loadPostList({ page: 1, pageSize: 3, tagSlugs: [] }),
+]);
+
+// hidden_fields 里列出的字段不对外展示（AC1.2：不渲染空占位、不留空行）
+const hidden = new Set(profile?.hiddenFields ?? []);
+const showLocation = Boolean(profile?.location) && !hidden.has('location');
+const showStatus = Boolean(profile?.status) && !hidden.has('status');
+const showEmail = Boolean(profile?.email) && !hidden.has('email');
+const avatarUrl = mediaUrl(profile?.avatarKey);
+const emailHref = mailtoHref(profile?.email);
+
+const description = profile?.headline ?? settings?.siteSubtitle ?? '';
+---
+
+<BaseLayout title="首页" description={description} currentPath="/" settings={settings} profile={profile}>
+  <section class="section hero">
+    <div class="container hero__grid">
+      <div>
+        {
+          showStatus && (
+            <p class="hero__eyebrow">
+              <span aria-hidden="true">●</span>
+              {profile?.status}
+            </p>
+          )
+        }
+
+        {
+          profile ? (
+            <h1 class="hero__title">{profile.displayName}</h1>
+          ) : (
+            <EmptyState
+              title="站点内容尚未初始化"
+              text="个人信息存储于 Cloudflare D1。请先执行数据迁移与演示数据写入，或登录后台填写个人信息。"
+            />
+          )
+        }
+
+        {profile?.headline && <p class="hero__headline">{profile.headline}</p>}
+
+        {
+          showLocation && (
+            <p class="hero__headline" style="margin-top: var(--space-3)">
+              <span class="badge">{profile?.location}</span>
+            </p>
+          )
+        }
+
+        {
+          profile && (
+            <div class="hero__cta">
+              <a class="btn btn--primary" href="/projects">
+                查看项目
+              </a>
+              <a class="btn btn--ghost" href="/contact">
+                联系我
+              </a>
+              {emailHref && (
+                <a class="btn btn--ghost" href={emailHref}>
+                  发送邮件
+                </a>
+              )}
+            </div>
+          )
+        }
+      </div>
+
+      {
+        profile && (
+          <div class="avatar">
+            {avatarUrl ? (
+              // 显式宽高：避免图片加载完成后把首屏内容推下去（CLS）
+              <img src={avatarUrl} alt={`${profile.displayName} 的头像`} width="168" height="168" />
+            ) : (
+              // 头像缺失时用姓名首字母占位，不出现破图（AC1.3）
+              <span class="avatar__initial" aria-hidden="true">
+                {nameInitial(profile.displayName)}
+              </span>
+            )}
+          </div>
+        )
+      }
+    </div>
+  </section>
+
+  <section class="section section--tight reveal" aria-labelledby="skills-heading">
+    <div class="container">
+      <div class="section-heading">
+        <h2 class="section-heading__title" id="skills-heading">技能</h2>
+        <a class="section-heading__hint" href="/about">更多经历 →</a>
+      </div>
+
+      {
+        skillGroups.length > 0 ? (
+          <div class="skill-groups">
+            {skillGroups.map((group) => (
+              <div class="skill-group">
+                <h3 class="skill-group__title">{group.name}</h3>
+                <div class="skill-group__items">
+                  {group.skills.map((skill) => (
+                    <span class="skill">
+                      {skill.name}
+                      {/* 熟练度为空时不渲染空进度条（AC2.2） */}
+                      {skill.level !== null && (
+                        <span class="skill__dots" aria-label={`熟练度 ${skill.level} / 5`}>
+                          {Array.from({ length: 5 }, (_, index) => (
+                            <span class={`skill__dot${index < (skill.level ?? 0) ? ' skill__dot--on' : ''}`} />
+                          ))}
+                        </span>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState title="还没有技能条目" text="在后台的「技能管理」里添加分组与技能后，这里会自动展示。" />
+        )
+      }
+    </div>
+  </section>
+
+  <section class="section section--tight reveal" aria-labelledby="featured-heading">
+    <div class="container">
+      <div class="section-heading">
+        <h2 class="section-heading__title" id="featured-heading">精选项目</h2>
+        <a class="section-heading__hint" href="/projects">全部项目 →</a>
+      </div>
+
+      {
+        featuredProjects.length > 0 ? (
+          <div class="grid-cards grid-cards--three">
+            {featuredProjects.map((project) => (
+              <ProjectCard project={project} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            title="还没有精选项目"
+            text="在后台把项目标记为「精选」后，它会出现在首页（最多 6 个）。"
+            actionHref="/projects"
+            actionLabel="浏览项目列表"
+          />
+        )
+      }
+    </div>
+  </section>
+
+  <section class="section section--tight reveal" aria-labelledby="posts-heading">
+    <div class="container">
+      <div class="section-heading">
+        <h2 class="section-heading__title" id="posts-heading">最新文章</h2>
+        <a class="section-heading__hint" href="/blog">全部文章 →</a>
+      </div>
+
+      {
+        latestPosts.items.length > 0 ? (
+          <div class="post-list">
+            {latestPosts.items.map((post) => (
+              <PostItem post={post} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState title="还没有已发布的文章" text="草稿不会出现在这里；发布后会自动进入列表与 RSS。" />
+        )
+      }
+    </div>
+  </section>
+
+  <section class="section reveal" aria-labelledby="contact-heading">
+    <div class="container">
+      <div class="section-heading">
+        <h2 class="section-heading__title" id="contact-heading">聊聊看</h2>
+      </div>
+      <p class="page-head__lead">
+        {settings?.siteSubtitle ?? '有合作意向、技术交流或只是想打个招呼，都欢迎来信。'}
+      </p>
+      <div class="hero__cta">
+        <a class="btn btn--primary" href="/contact">前往联系页</a>
+        {emailHref && <a class="btn btn--ghost" href={emailHref}>直接发邮件</a>}
+      </div>
+    </div>
+  </section>
+</BaseLayout>

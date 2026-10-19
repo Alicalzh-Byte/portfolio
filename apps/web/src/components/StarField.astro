@@ -1,0 +1,324 @@
+---
+/**
+ * StarField · 全站星空背景（纯装饰层）
+ *
+ * 实现约束来自 TECH_DESIGN §4.3 与 PRD §5.5，改它之前请先读那两节：
+ * - 只用**一个 <canvas>** 手写绘制。禁止 three.js / p5.js / 任何图形库。
+ * - 禁止用大量 DOM 元素 + CSS 动画模拟星空（会引发重排与合成层压力）。
+ * - 星点随机必须来自**固定种子**，否则每帧重随机会出现噪点闪烁。
+ * - 三档降级：prefers-reduced-motion → 只画一帧、不启 rAF；低端设备 → 减星点、关流星；
+ *   窄屏 → 按面积缩减星点。
+ * - document.hidden 时暂停，恢复时重置时间基准（否则星群会突然往前跳）。
+ * - 画布物理像素 devicePixelRatio 封顶 2。
+ */
+interface Props {
+  /** 长文页传 true：降低不透明度，避免星空干扰阅读 */
+  dim?: boolean;
+}
+
+const { dim = false } = Astro.props;
+---
+
+<canvas class:list={['star-field', dim && 'star-field--dim']} data-star-field aria-hidden="true"></canvas>
+
+<style>
+  .star-field {
+    position: fixed;
+    inset: 0;
+    /*
+     * width/height 必须显式写 100%：<canvas> 属于**替换元素**，`width: auto` 取的是
+     * 固有尺寸（即 width/height 属性值），单靠 `inset: 0` 并不会把它撑满视口 ——
+     * 那样会渲染成 300×150 的一小块。display: block 同时消掉行内元素基线间隙。
+     */
+    width: 100%;
+    height: 100%;
+    display: block;
+    /* 最底层；内容由 .page-shell 抬到它之上，且这里永不接收指针事件（PRD AC7.1） */
+    z-index: var(--z-stars);
+    pointer-events: none;
+    opacity: var(--star-opacity-default);
+    transition: opacity var(--dur-enter) var(--ease-standard);
+  }
+
+  .star-field--dim {
+    opacity: var(--star-opacity-article);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .star-field {
+      transition: none;
+    }
+  }
+</style>
+
+<script>
+  /** 固定种子：保证同一次会话内星点分布稳定，且刷新后不出现「另一片星空」。 */
+  const STAR_SEED = 20261019;
+  const DPR_CAP = 2;
+  /** 每帧耗时预算（毫秒）。连续多帧超预算就自动降档（TECH_DESIGN §4.3.6）。 */
+  const FRAME_BUDGET_MS = 2;
+
+  const canvas = document.querySelector('canvas[data-star-field]');
+  if (canvas instanceof HTMLCanvasElement) {
+    const context = canvas.getContext('2d');
+    if (context) {
+      initStarField(canvas, context);
+    }
+  }
+
+  function initStarField(target, ctx) {
+    const reduceMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const finePointerQuery = window.matchMedia('(pointer: fine)');
+
+    /** 三档视差层的基准参数（数量、漂移速度 px/s、半径区间、基础亮度）。 */
+    const LAYERS = [
+      { count: 140, speed: 5, minRadius: 0.4, maxRadius: 0.8, alpha: 0.35, accentRatio: 0, twinkle: false },
+      { count: 70, speed: 10, minRadius: 0.7, maxRadius: 1.2, alpha: 0.6, accentRatio: 0.05, twinkle: false },
+      { count: 26, speed: 16, minRadius: 1, maxRadius: 1.8, alpha: 0.95, accentRatio: 0.2, twinkle: true },
+    ];
+
+    let width = 0;
+    let height = 0;
+    let stars = [];
+    let meteors = [];
+    let nextMeteorAt = 0;
+    let frameHandle = 0;
+    let running = false;
+    let lastTimestamp = 0;
+    let elapsedMs = 0;
+    /** high | low：low 表示已因性能不足自动降档 */
+    let quality = 'high';
+    const frameCosts = [];
+    const pointer = { x: 0, y: 0, targetX: 0, targetY: 0 };
+
+    /** mulberry32：小巧的确定性伪随机，用于星点位置与流星时序。 */
+    function createRandom(seed) {
+      let state = seed >>> 0;
+      return function nextRandom() {
+        state = (state + 0x6d2b79f5) >>> 0;
+        let mixed = Math.imul(state ^ (state >>> 15), 1 | state);
+        mixed = (mixed + Math.imul(mixed ^ (mixed >>> 7), 61 | mixed)) ^ mixed;
+        return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    const random = createRandom(STAR_SEED);
+
+    /** 按屏幕面积与设备档位等比缩放星点数量（AC7.4 不因屏宽变化而变形/空白）。 */
+    function starScale() {
+      const areaScale = Math.min(1, Math.max(0.35, (width * height) / (1440 * 900)));
+      const narrowScale = width < 480 ? 0.6 : 1;
+      const qualityScale = quality === 'low' ? 0.55 : 1;
+      return areaScale * narrowScale * qualityScale;
+    }
+
+    function buildStars() {
+      const rebuildRandom = createRandom(STAR_SEED);
+      const scale = starScale();
+      const nextStars = [];
+
+      LAYERS.forEach((layer, layerIndex) => {
+        const count = Math.max(6, Math.round(layer.count * scale));
+        for (let index = 0; index < count; index += 1) {
+          const isAccent = rebuildRandom() < layer.accentRatio;
+          nextStars.push({
+            layer: layerIndex,
+            x: rebuildRandom() * width,
+            y: rebuildRandom() * height,
+            radius: layer.minRadius + rebuildRandom() * (layer.maxRadius - layer.minRadius),
+            baseAlpha: layer.alpha * (0.7 + rebuildRandom() * 0.3),
+            // 低端设备关闭明暗呼吸，省掉每帧的三角运算
+            twinkle: layer.twinkle && quality === 'high',
+            phase: rebuildRandom() * Math.PI * 2,
+            period: 3000 + rebuildRandom() * 3000,
+            color: isAccent ? (rebuildRandom() < 0.5 ? '#7c5cff' : '#22d3ee') : '#e8eaf6',
+          });
+        }
+      });
+
+      stars = nextStars;
+    }
+
+    function resize() {
+      const dpr = Math.min(window.devicePixelRatio || 1, DPR_CAP);
+      width = target.clientWidth || window.innerWidth;
+      height = target.clientHeight || window.innerHeight;
+      target.width = Math.round(width * dpr);
+      target.height = Math.round(height * dpr);
+      // 用变换把逻辑坐标映射到物理像素，之后绘制都按 CSS 像素思考
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      buildStars();
+    }
+
+    function spawnMeteor(now) {
+      const fromLeft = random() < 0.5;
+      meteors.push({
+        x: fromLeft ? -40 : width + 40,
+        y: random() * height * 0.5,
+        vx: (fromLeft ? 1 : -1) * (420 + random() * 260),
+        vy: 150 + random() * 120,
+        ttl: 600 + random() * 400,
+        life: 0,
+      });
+      // 每 8~20 秒一次（PRD §5.5）
+      nextMeteorAt = now + 8000 + random() * 12000;
+    }
+
+    function drawMeteors(deltaMs) {
+      const survivors = [];
+      for (const meteor of meteors) {
+        meteor.life += deltaMs;
+        if (meteor.life >= meteor.ttl) continue;
+
+        meteor.x += (meteor.vx * deltaMs) / 1000;
+        meteor.y += (meteor.vy * deltaMs) / 1000;
+
+        const remaining = 1 - meteor.life / meteor.ttl;
+        const tailX = meteor.x - meteor.vx * 0.1;
+        const tailY = meteor.y - meteor.vy * 0.1;
+        const gradient = ctx.createLinearGradient(meteor.x, meteor.y, tailX, tailY);
+        gradient.addColorStop(0, `rgba(232, 234, 246, ${0.9 * remaining})`);
+        gradient.addColorStop(1, 'rgba(232, 234, 246, 0)');
+
+        ctx.strokeStyle = gradient;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(meteor.x, meteor.y);
+        ctx.lineTo(tailX, tailY);
+        ctx.stroke();
+
+        survivors.push(meteor);
+      }
+      meteors = survivors;
+    }
+
+    /**
+     * 绘制一帧。
+     * advance=false 时只做静态绘制（reduced-motion 的唯一路径）。
+     */
+    function paint(now, advance) {
+      const startedAt = performance.now();
+      const previous = lastTimestamp;
+      lastTimestamp = now;
+      // delta 限幅：即使标签页被挂起很久，恢复后也只是一小步，不会出现位移跳变
+      const delta = advance ? (previous === 0 ? 16 : Math.min(48, now - previous)) : 0;
+      if (advance) elapsedMs += delta;
+
+      // 视差缓动，最终位移量被限制在 ±8px 以内
+      pointer.x += (pointer.targetX - pointer.x) * 0.06;
+      pointer.y += (pointer.targetY - pointer.y) * 0.06;
+
+      ctx.clearRect(0, 0, width, height);
+
+      for (const star of stars) {
+        const layer = LAYERS[star.layer];
+        if (advance) {
+          star.x += (layer.speed * delta) / 1000;
+          star.y -= (layer.speed * 0.18 * delta) / 1000;
+          if (star.x > width + 2) star.x = -2;
+          if (star.y < -2) star.y = height + 2;
+        }
+
+        const depth = (star.layer + 1) / LAYERS.length;
+        const alpha = star.twinkle && advance
+          ? star.baseAlpha * (0.6 + 0.4 * Math.sin((elapsedMs / star.period) * Math.PI * 2 + star.phase))
+          : star.baseAlpha;
+
+        ctx.globalAlpha = Math.max(0.05, alpha);
+        ctx.fillStyle = star.color;
+        ctx.beginPath();
+        ctx.arc(star.x + pointer.x * 8 * depth, star.y + pointer.y * 8 * depth, star.radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      if (advance && quality === 'high') {
+        if (now >= nextMeteorAt) spawnMeteor(now);
+        drawMeteors(delta);
+      }
+
+      ctx.globalAlpha = 1;
+
+      if (advance) trackFrameCost(performance.now() - startedAt);
+    }
+
+    /** 连续多帧超预算 → 自动降档一次（只降不升，避免亮度来回抖动）。 */
+    function trackFrameCost(cost) {
+      frameCosts.push(cost);
+      if (frameCosts.length > 40) frameCosts.shift();
+      if (frameCosts.length < 40 || quality === 'low') return;
+
+      const average = frameCosts.reduce((sum, value) => sum + value, 0) / frameCosts.length;
+      if (average > FRAME_BUDGET_MS) {
+        quality = 'low';
+        meteors = [];
+        buildStars();
+      }
+    }
+
+    function tick(now) {
+      if (!running) return;
+      paint(now, true);
+      frameHandle = window.requestAnimationFrame(tick);
+    }
+
+    function start() {
+      if (running) return;
+
+      // reduced-motion：只画一帧静态星空，**不启动 rAF 循环**（PRD AC7.2）
+      if (reduceMotionQuery.matches) {
+        lastTimestamp = 0;
+        paint(0, false);
+        return;
+      }
+
+      running = true;
+      // 重置时间基准，避免从隐藏状态恢复时把挂起时长算进位移
+      lastTimestamp = 0;
+      frameHandle = window.requestAnimationFrame(tick);
+    }
+
+    function stop() {
+      running = false;
+      if (frameHandle) {
+        window.cancelAnimationFrame(frameHandle);
+        frameHandle = 0;
+      }
+    }
+
+    function restart() {
+      stop();
+      resize();
+      nextMeteorAt = 0;
+      frameCosts.length = 0;
+      start();
+    }
+
+    resize();
+    start();
+
+    window.addEventListener('resize', () => {
+      // 尺寸变化时重建星点：让分布始终均匀铺满视口
+      stop();
+      resize();
+      start();
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) stop();
+      else restart();
+    });
+
+    reduceMotionQuery.addEventListener('change', restart);
+
+    if (finePointerQuery.matches) {
+      window.addEventListener(
+        'pointermove',
+        (event) => {
+          pointer.targetX = (event.clientX / window.innerWidth) * 2 - 1;
+          pointer.targetY = (event.clientY / window.innerHeight) * 2 - 1;
+        },
+        { passive: true },
+      );
+    }
+  }
+</script>

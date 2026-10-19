@@ -1,0 +1,22 @@
+---
+/** 标签胶囊（PRD §5.6）。作为链接时用于筛选，非链接时用于展示。 */
+interface Props {
+  tag: { name: string; slug: string };
+  /** 传 href 渲染成链接（带筛选参数），否则渲染成静态胶囊 */
+  href?: string | null;
+  /** 多选筛选时的选中态 */
+  pressed?: boolean;
+}
+
+const { tag, href = null, pressed = false } = Astro.props;
+---
+
+{
+  href ? (
+    <a class="tag" href={href} aria-pressed={pressed ? 'true' : undefined}>
+      {tag.name}
+    </a>
+  ) : (
+    <span class="tag">{tag.name}</span>
+  )
+}

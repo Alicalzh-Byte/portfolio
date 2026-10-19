@@ -1,0 +1,31 @@
+# Cloudflare Workers 项目配置：D1 / R2 绑定与站点级变量声明。
+# 部署前需要在 Cloudflare 控制台创建同名的 D1 / R2 资源，并把真实 database_id 填进来。
+#
+# ⚠️ 这里**刻意不写 `main` / `assets`**：
+# 本仓库的 Worker 入口与静态资源目录由 @astrojs/cloudflare 在构建时产出，
+# 而构建期间 @cloudflare/vite-plugin 会先校验配置里的 `main` 必须已存在 —— 它恰恰是本次构建才生成的，
+# 写上去会让首次构建必然失败（先有鸡还是先有蛋，实测报 "main field ... doesn't point to an existing file"）。
+# 真正拿来部署的是构建产物里的 apps/web/dist/server/wrangler.json：它由本文件自动继承
+# 绑定、变量与兼容性日期，并补上 main / assets。部署命令：
+#   npx wrangler deploy --config apps/web/dist/server/wrangler.json
+#
+# 另外：本项目部署到 Cloudflare Workers，**不是 Cloudflare Pages**
+# （@astrojs/cloudflare v14 已移除 Pages 支持），所以不要写 pages_build_output_dir。
+
+name = "portfolio"
+compatibility_date = "2026-10-01"
+
+# 站点级明文环境变量（非密钥）。部署时改成真实的访问地址，RSS / sitemap 的绝对链接依赖它。
+[vars]
+SITE_URL = "https://example.workers.dev"
+
+# 本地 D1：`pnpm db:migrate:local` 会据此在 .wrangler/state 下创建本地实例
+[[d1_databases]]
+binding = "DB"
+database_name = "portfolio-db"
+database_id = "00000000-0000-0000-0000-000000000000"
+
+# 图片对象存储：头像 / 封面 / 正文图
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "portfolio-media"

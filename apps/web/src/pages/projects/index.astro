@@ -1,0 +1,108 @@
+---
+/**
+ * 项目列表（PRD F3 / AC3.2）。
+ * 标签筛选走 URL 查询参数，因此筛选状态可分享、可被浏览器前进后退还原。
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import ProjectCard from '../../components/ProjectCard.astro';
+import EmptyState from '../../components/EmptyState.astro';
+import Pagination from '../../components/Pagination.astro';
+import { parsePageQuery, parseTagParams, totalPages } from '@portfolio/shared/query';
+import { loadProjectList, loadSiteContext, loadTags } from '../../lib/server/content';
+
+const { settings, profile } = await loadSiteContext();
+
+const params = Astro.url.searchParams;
+const { page, pageSize } = parsePageQuery(params);
+const selectedTags = parseTagParams(params);
+
+const [tags, projectList] = await Promise.all([
+  loadTags(),
+  loadProjectList({ page, pageSize, tagSlugs: selectedTags }),
+]);
+
+const pageCount = totalPages(projectList.total, pageSize);
+
+/** 拼装保留既有筛选参数的链接；toggleTag 用于「点标签切换选中」。 */
+function buildHref(next: { page?: number; tags?: string[] }): string {
+  const search = new URLSearchParams();
+  const tagsForLink = next.tags ?? selectedTags;
+  for (const tag of tagsForLink) search.append('tag', tag);
+  const targetPage = next.page ?? 1;
+  if (targetPage > 1) search.set('page', String(targetPage));
+  const query = search.toString();
+  return query ? `/projects?${query}` : '/projects';
+}
+
+function toggleTag(slug: string): string {
+  const next = selectedTags.includes(slug)
+    ? selectedTags.filter((item) => item !== slug)
+    : [...selectedTags, slug];
+  return buildHref({ tags: next, page: 1 });
+}
+
+const availableTags = tags.filter((tag) => tag.projectCount > 0);
+---
+
+<BaseLayout
+  title="项目"
+  description="做过的项目与作品，可按技术标签筛选。"
+  currentPath="/projects"
+  settings={settings}
+  profile={profile}
+>
+  <div class="container">
+    <header class="page-head">
+      <h1 class="page-head__title">项目</h1>
+      <p class="page-head__lead">
+        共 {projectList.total} 个项目{selectedTags.length > 0 ? '（已筛选）' : ''}。
+      </p>
+    </header>
+
+    {
+      availableTags.length > 0 && (
+        <div class="toolbar" aria-label="按技术标签筛选">
+          <span class="toolbar__label">按标签筛选：</span>
+          <div class="tag-row">
+            {availableTags.map((tag) => (
+              <a
+                class="tag"
+                href={toggleTag(tag.slug)}
+                aria-pressed={selectedTags.includes(tag.slug) ? 'true' : 'false'}
+              >
+                {tag.name}
+                <span class="tabular"> {tag.projectCount}</span>
+              </a>
+            ))}
+          </div>
+          {selectedTags.length > 0 && (
+            <a class="toolbar__label" href="/projects">
+              清除筛选
+            </a>
+          )}
+        </div>
+      )
+    }
+
+    {
+      projectList.items.length > 0 ? (
+        <div class="grid-cards grid-cards--three">
+          {projectList.items.map((project) => (
+            <ProjectCard project={project} />
+          ))}
+        </div>
+      ) : selectedTags.length > 0 ? (
+        <EmptyState
+          title="没有匹配的项目"
+          text="当前标签组合下没有项目，试着换一组标签或者清除筛选。"
+          actionHref="/projects"
+          actionLabel="清除筛选"
+        />
+      ) : (
+        <EmptyState title="还没有项目" text="在后台创建项目后，这里会按手动排序与时间倒序展示。" />
+      )
+    }
+
+    <Pagination page={page} totalPages={pageCount} hrefFor={(target) => buildHref({ page: target })} />
+  </div>
+</BaseLayout>

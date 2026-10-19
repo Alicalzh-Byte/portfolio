@@ -1,0 +1,33 @@
+---
+/**
+ * 经历时间线（关于页）。条目数据来自 D1 的 timeline_items 表，不硬编码进模板。
+ * 桌面两栏（时间段 | 内容），移动端上下排列（PRD §5.6 / §5.9）。
+ */
+import type { TimelineItem } from '@portfolio/shared/types';
+
+interface Props {
+  items: TimelineItem[];
+}
+
+const { items } = Astro.props;
+---
+
+<ol class="timeline">
+  {
+    items.map((item) => (
+      <li class="timeline__item">
+        <span class="timeline__period tabular">{item.period}</span>
+        <span class="timeline__title">{item.title}</span>
+        {item.description && <span class="timeline__desc">{item.description}</span>}
+      </li>
+    ))
+  }
+</ol>
+
+<style>
+  /* 时间线用 ol/li，去掉列表符号但保留语义 */
+  .timeline {
+    list-style: none;
+    padding: 0;
+  }
+</style>

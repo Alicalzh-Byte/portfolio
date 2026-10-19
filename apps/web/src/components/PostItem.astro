@@ -1,0 +1,42 @@
+---
+/**
+ * 文章列表条目（PRD F4：标题 / 摘要 / 日期 / 阅读时长 / 标签）。
+ * 注意：这里只负责渲染传入的数据，草稿过滤发生在数据层（repositories），不在这里做「前端隐藏」。
+ */
+import type { PostSummary } from '@portfolio/shared/types';
+import TagPill from './TagPill.astro';
+import { formatDate, postHref, tagHref } from '../lib/format';
+
+interface Props {
+  post: PostSummary;
+}
+
+const { post } = Astro.props;
+---
+
+<article class="post-item">
+  <h3 class="post-item__title">
+    <a href={postHref(post.slug)}>{post.title}</a>
+  </h3>
+
+  {post.summary && <p class="post-item__summary">{post.summary}</p>}
+
+  <div class="post-item__meta">
+    <time class="tabular" datetime={post.publishedAt ?? post.createdAt}>
+      {formatDate(post.publishedAt ?? post.createdAt)}
+    </time>
+    <span aria-hidden="true">·</span>
+    <span>约 {post.readingMinutes} 分钟</span>
+
+    {
+      post.tags.length > 0 && (
+        <>
+          <span aria-hidden="true">·</span>
+          <div class="tag-row">
+            {post.tags.map((tag) => <TagPill tag={tag} href={tagHref(tag.slug)} />)}
+          </div>
+        </>
+      )
+    }
+  </div>
+</article>

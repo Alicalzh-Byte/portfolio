@@ -1,0 +1,19 @@
+{
+  "name": "@portfolio/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "公开站点（Astro · output: server · Cloudflare Workers）",
+  "scripts": {
+    "dev": "astro dev --host 127.0.0.1 --port 4321",
+    "build": "astro build",
+    "preview": "astro preview",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@astrojs/cloudflare": "^14.4.0",
+    "@portfolio/shared": "workspace:*",
+    "astro": "^7.4.0",
+    "hono": "^4.13.13"
+  }
+}
