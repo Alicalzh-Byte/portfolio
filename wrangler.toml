@@ -15,9 +15,10 @@
 name = "portfolio"
 compatibility_date = "2026-10-01"
 
-# 站点级明文环境变量（非密钥）。部署时改成真实的访问地址，RSS / sitemap 的绝对链接依赖它。
+# 站点级明文环境变量（非密钥）。改成真实的访问地址，RSS / sitemap 的绝对链接依赖它
+# （rss.xml.ts / sitemap.xml.ts 读的就是这里的运行时 SITE_URL）。
 [vars]
-SITE_URL = "https://example.workers.dev"
+SITE_URL = "https://portfolio.1063968857.workers.dev"
 
 # 本地 D1：`pnpm db:migrate:local` 会据此在 .wrangler/state 下创建本地实例
 [[d1_databases]]

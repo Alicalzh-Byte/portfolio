@@ -26,7 +26,10 @@ export default defineConfig({
     // 两边各写一份库 → dev 里「表不存在」。这里显式指回仓库根，让 CLI 与 dev 共用同一个本地 D1。
     persistState: { path: '../../.wrangler/state' },
   }),
-  site: process.env.SITE_URL ?? 'https://example.workers.dev',
+  // canonical / og:url 由 BaseLayout 依据 Astro.site 生成，这是**构建期**的值；
+  // 而 Cloudflare 构建环境里没有 SITE_URL 这个环境变量（wrangler.toml 的 [vars] 只注入运行时），
+  // 所以这里必须硬编码真实地址兜底。RSS / sitemap 走运行时，见 wrangler.toml。
+  site: process.env.SITE_URL ?? 'https://portfolio.1063968857.workers.dev',
   server: { host: '127.0.0.1', port: 4321 },
   vite: {
     // shared 以源码形式被消费：必须让 SSR 打包它，否则 Workers 侧会拿到无法解析的 .ts
