@@ -23,9 +23,16 @@ SITE_URL = "https://example.workers.dev"
 [[d1_databases]]
 binding = "DB"
 database_name = "portfolio-db"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "cf852575-b646-4d09-9745-5985874d5387"
 
 # 图片对象存储：头像 / 封面 / 正文图
-[[r2_buckets]]
-binding = "MEDIA"
-bucket_name = "portfolio-media"
+#
+# ⚠️ 暂时停用（首次部署时 R2 尚未激活）。Cloudflare 要求先在控制台手动启用一次 R2，
+# 在那之前桶不存在，若保留这段绑定会让 `wrangler deploy` 因「桶不存在」整体失败。
+# 代码侧已优雅降级：无此绑定时 getMediaBucket() 返回 null，
+# `/media/{key}` 返回 404，后台上传/删除图片返回错误响应，其余功能不受影响。
+# 待启用 R2 并创建 portfolio-media 桶后，取消下面三行的注释并重新构建部署即可恢复。
+#
+# [[r2_buckets]]
+# binding = "MEDIA"
+# bucket_name = "portfolio-media"
