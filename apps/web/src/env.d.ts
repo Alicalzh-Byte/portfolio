@@ -10,13 +10,13 @@
  */
 
 type D1Database = import('@cloudflare/workers-types').D1Database;
-type R2Bucket = import('@cloudflare/workers-types').R2Bucket;
+type KVNamespace = import('@cloudflare/workers-types').KVNamespace;
 
 interface Env {
   /** D1 数据库绑定（wrangler.toml 中的 [[d1_databases]]） */
   DB: D1Database;
-  /** R2 图片存储绑定（wrangler.toml 中的 [[r2_buckets]]） */
-  MEDIA: R2Bucket;
+  /** 图片存储绑定（wrangler.toml 中的 [[kv_namespaces]]）。绑定名沿用 MEDIA，后端已从 R2 换成 KV。 */
+  MEDIA: KVNamespace;
   /** 站点对外地址，用于 RSS / sitemap 的绝对链接 */
   SITE_URL?: string;
   /** Cloudflare Access 团队域，用于校验 JWT 的 iss */

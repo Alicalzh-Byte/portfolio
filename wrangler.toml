@@ -26,14 +26,13 @@ binding = "DB"
 database_name = "portfolio-db"
 database_id = "cf852575-b646-4d09-9745-5985874d5387"
 
-# 图片对象存储：头像 / 封面 / 正文图
+# 图片对象存储绑定。
 #
-# ⚠️ 暂时停用（首次部署时 R2 尚未激活）。Cloudflare 要求先在控制台手动启用一次 R2，
-# 在那之前桶不存在，若保留这段绑定会让 `wrangler deploy` 因「桶不存在」整体失败。
-# 代码侧已优雅降级：无此绑定时 getMediaBucket() 返回 null，
-# `/media/{key}` 返回 404，后台上传/删除图片返回错误响应，其余功能不受影响。
-# 待启用 R2 并创建 portfolio-media 桶后，取消下面三行的注释并重新构建部署即可恢复。
-#
-# [[r2_buckets]]
-# binding = "MEDIA"
-# bucket_name = "portfolio-media"
+# ⚠️ 这里用 **Workers KV** 而不是 R2：启用 R2 必须先绑定银行卡，而 KV 的免费额度
+# （1GB 存储 / 10 万次读每天 / 1000 次写每天）无需绑卡，对个人站的图片量完全够用。
+# 绑定名沿用 MEDIA，代码侧只换了后端实现（见 apps/web/src/lib/server/storage.ts）。
+# 代价：单值上限 25MiB（上传接口本就限制 5MB）、写入最终一致；key 含 uuid 且内容永不覆写，
+# 读取端又走 immutable 长缓存，因此这两点在项目里都不构成问题。
+[[kv_namespaces]]
+binding = "MEDIA"
+id = "1d7f23db431f4417a4f028187409244c"

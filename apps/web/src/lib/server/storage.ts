@@ -1,10 +1,17 @@
 /**
- * R2 存储读写（服务端专用）。
+ * 图片存储读写（服务端专用）。
+ *
+ * 后端是 **Workers KV**，不是 R2 —— 这是对 TECH_DESIGN §1.5 的一处有意偏离：
+ * R2 必须先绑定银行卡才能启用，而 KV 的免费额度（1GB 存储 / 10 万次读每天）**无需绑卡**，
+ * 对个人站的图片量完全够用；换来的代价是下面这两条限制，在本项目里都不构成问题：
+ *   1. 单值上限 25MiB —— 上传接口本来就把图片限制在 5MB 以内；
+ *   2. 写入最终一致（全球同步约需 60 秒）—— key 含 uuid 且内容永不覆写，
+ *      同一位置的写入后立刻读取是一致的，而读取端又走了 immutable 长缓存。
+ * R2 若日后启用，只需把这里与 wrangler.toml 的绑定换回去，调用方无需改动。
  *
  * key 规则：`{yyyy}/{mm}/{uuid}.{ext}` —— 按时间分目录便于日后排查与批量清理，
  * uuid 保证唯一，不使用原始文件名（避免中文名、重名与路径穿越）。
  */
-import type { R2Bucket } from '@cloudflare/workers-types';
 import { getRuntimeEnv } from './runtime-env';
 
 /** 各格式对应的扩展名，用于生成 key。 */
@@ -15,13 +22,11 @@ const EXTENSION_BY_MIME: Record<string, string> = {
   'image/gif': 'gif',
 };
 
-export function getMediaBucket(): R2Bucket | null {
-  return getRuntimeEnv()?.MEDIA ?? null;
-}
+/** 随对象一起写进 KV 的元数据：MIME 用于回读时设置响应头，原始文件名仅供排查。 */
+type MediaMetadata = { mime: string; originalName: string | null };
 
-/** 由显式传入的绑定集合取得 R2 桶（已持有 env 的场景，例如后台上传端点）。 */
-export function getMediaBucketFromEnv(runtimeEnv: Env | undefined): R2Bucket | null {
-  return runtimeEnv?.MEDIA ?? null;
+export function getMediaStore(): KVNamespace | null {
+  return getRuntimeEnv()?.MEDIA ?? null;
 }
 
 /** 生成对象 key。 */
@@ -32,34 +37,32 @@ export function buildObjectKey(mime: string, now = new Date()): string {
   return `${year}/${month}/${crypto.randomUUID()}.${extension}`;
 }
 
-/** 写入对象。metadata 里带上原始文件名与 MIME，便于日后排查与直接回读。 */
+/** 写入对象。MIME 与原始文件名放 KV metadata，回读时无需再查数据库。 */
 export async function putObject(
-  bucket: R2Bucket,
+  store: KVNamespace,
   key: string,
   body: ArrayBuffer,
   options: { mime: string; originalName: string | null },
 ): Promise<void> {
-  await bucket.put(key, body, {
-    httpMetadata: { contentType: options.mime },
-    customMetadata: options.originalName ? { originalName: options.originalName } : {},
-  });
+  const metadata: MediaMetadata = { mime: options.mime, originalName: options.originalName };
+  await store.put(key, body, { metadata });
 }
 
 export async function getObject(
-  bucket: R2Bucket,
+  store: KVNamespace,
   key: string,
 ): Promise<{ body: ReadableStream; mime: string } | null> {
-  const object = await bucket.get(key);
-  if (!object) return null;
+  const result = await store.getWithMetadata<MediaMetadata>(key, { type: 'stream' });
+  if (result.value === null) return null;
 
   return {
-    body: object.body as unknown as ReadableStream,
-    mime: object.httpMetadata?.contentType ?? 'application/octet-stream',
+    body: result.value as unknown as ReadableStream,
+    mime: result.metadata?.mime ?? 'application/octet-stream',
   };
 }
 
-export async function deleteObject(bucket: R2Bucket, key: string): Promise<void> {
-  await bucket.delete(key);
+export async function deleteObject(store: KVNamespace, key: string): Promise<void> {
+  await store.delete(key);
 }
 
 /**
