@@ -17,7 +17,7 @@
 | 后台 | React 18 + Vite 独立 SPA，挂 `/admin`，由 Cloudflare Access 保护 |
 | 后端 | Cloudflare Workers 运行时 + Hono + Zod。**接口以 Astro endpoint 实现**（`src/pages/api/**` + `src/middleware.ts`），原因见 TECH_DESIGN §2.1 的偏离说明 |
 | 数据库 | Cloudflare D1（SQLite） |
-| 图片存储 | Cloudflare R2 |
+| 图片存储 | Cloudflare Workers KV（原计划 R2，见 TECH_DESIGN.md §1.5 偏离说明） |
 | 包管理 | pnpm workspaces（`packages/shared` + `apps/web` + `apps/admin`） |
 
 **最高优先级约束（违反即视为任务失败）**
@@ -34,7 +34,7 @@
 | 命令 | 用途 |
 | --- | --- |
 | `pnpm install` | 安装依赖 |
-| `pnpm dev` | 本地开发（`astro dev`）。本地 D1 / R2 / 环境变量绑定由 Cloudflare Vite 插件从仓库根 `wrangler.toml` 注入，因此**改绑定要改根配置**，不是改 `apps/web` 下的文件 |
+| `pnpm dev` | 本地开发（`astro dev`）。本地 D1 / KV / 环境变量绑定由 Cloudflare Vite 插件从仓库根 `wrangler.toml` 注入，因此**改绑定要改根配置**，不是改 `apps/web` 下的文件 |
 | `pnpm preview` | `wrangler dev`：以**构建产物**在真实 Workers 运行时（workerd）里预览，最贴近线上。**需先 `pnpm build`** |
 | `pnpm build` | 构建 shared → web → admin，最后把后台 SPA 产物搬进 Worker 的静态资源目录（`scripts/copy-admin.ts`），使 `/admin` 在线上可用 |
 | `pnpm lint` | ESLint 检查 |
@@ -79,7 +79,7 @@ tests/             unit（Vitest）+ e2e（Playwright）
 | `packages/shared` 不得依赖 Workers/Cloudflare 运行时 API | 它必须能在浏览器、Workers、测试环境三处运行 |
 | 前端组件不得 import `apps/web/src/lib/server/*` | 避免服务端代码（含密钥读取）被打进前端 bundle |
 | **SQL 只允许出现在 `lib/server/repositories/`** | 接口层与页面层不得直接写 SQL |
-| 前端不得直接 fetch D1/R2 | 一律走 `/api/*` |
+| 前端不得直接 fetch D1/KV | 一律走 `/api/*` |
 
 **放置决策速查**
 
@@ -120,7 +120,7 @@ tests/             unit（Vitest）+ e2e（Playwright）
 ### 4.3 数据写入与一致性
 
 - **任何内容写操作成功后必须自增 `settings.content_version`**，否则前台会长时间看到旧内容。
-- 图片上传的顺序固定：**先写 R2，再写 `media` 表**；写库失败要回滚已上传对象，避免孤儿文件。
+- 图片上传的顺序固定：**先写 KV，再写 `media` 表**；写库失败要回滚已上传对象，避免孤儿文件。
 - 删除操作要能回答「影响面」：删除图片前扫描引用并在接口响应里给出 `usage` 信息。
 - 破坏性操作（删文章、删项目、删图片）在后台必须二次确认，并由服务端记录 `content_revisions` 快照（P1 落地前至少保留一份可恢复备份）。
 

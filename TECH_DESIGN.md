@@ -12,7 +12,7 @@
 
 ## 0. 一句话方案
 
-**用 Astro 生成以静态 HTML 为主的站点，内容存在 Cloudflare D1，图片存在 R2，读写接口跑在 Cloudflare Workers 运行时，后台单页应用挂 `/admin` 并由 Cloudflare Access 保护。没有服务器、没有容器、没有自建数据库。**
+**用 Astro 生成以静态 HTML 为主的站点，内容存在 Cloudflare D1，图片存在 Workers KV，读写接口跑在 Cloudflare Workers 运行时，后台单页应用挂 `/admin` 并由 Cloudflare Access 保护。没有服务器、没有容器、没有自建数据库。**
 
 选型理由一句话版：个人站点是**读多写极少、内容量小、预算低**的场景，Cloudflare 这套组合把「运维」这一项直接消掉了，并且后台改完内容能即时生效——这正好命中我们选的「有后台可改内容」这条路线。
 
@@ -32,7 +32,7 @@
 | 后端 | **Cloudflare Workers 运行时** + **Hono** 路由（接口以 Astro endpoint 落地，见 §2.1 偏离说明） | 无服务器，`/api/*` |
 | 校验 | **Zod** | 所有入参/出参运行时校验 |
 | 数据库 | **Cloudflare D1**（SQLite） | 关系型内容存储 |
-| 对象存储 | **Cloudflare R2** | 头像/封面/正文图 |
+| 对象存储 | **Cloudflare Workers KV**（原计划 R2，见 §1.5 偏离说明） | 头像/封面/正文图 |
 | 访问控制 | **Cloudflare Access**（Zero Trust） | 保护 `/admin` 与 `/api/admin/*` |
 | Markdown | **unified**（remark-parse → remark-rehype → rehype-sanitize → rehype-stringify）+ **Shiki** 高亮 | 后台预览与线上渲染共用同一管线 |
 | 构建/包管理 | **pnpm workspaces** | 单仓库多包 |
@@ -70,15 +70,32 @@
 | Cloudflare KV | 键值存储，做不了「按标签筛选」「分页排序」这类查询 | 不选（可作为缓存层） |
 | Postgres（Neon/Supabase） | 能力过剩；个人站数据量在千行级，还要多付一层外部依赖与网络往返 | 不选 |
 | 纯 Markdown 文件 | 无法满足后台在线编辑 | 不选 |
-| JSON 文件放 R2 | 无并发控制与查询能力，内容一多就难维护 | 不选 |
+| JSON 文件放对象存储（R2 / KV） | 无并发控制与查询能力，内容一多就难维护 | 不选 |
 
 **数据量评估**：个人站典型规模为「文章数百篇、项目数十个、技能数十条」。D1 免费额度与性能对这样的规模是充足的，压力点主要在**读**，而读可以通过边缘缓存化解（见 §4.2）。
 
 ### 1.5 其他关键选型
 
-- **图片存储用 R2 而非把图片提交进仓库**：仓库体积不会随内容膨胀，且 Cloudflare 的 R2 出站流量不单独计费。
+- **图片存储用 Workers KV 而非把图片提交进仓库**：仓库体积不会随内容膨胀；KV 无需绑定银行卡即可启用（R2 需绑卡），免费额度（1GB 存储 / 10 万次读每天 / 1000 次写每天）对个人站图片量够用。
 - **高亮用 Shiki 但限定语言集**：Workers 有 CPU 时间限制，只为常用语言（js/ts/json/html/css/bash/sql/python/md）注册语法，避免冷启动开销失控。
 - **不用第三方统计与广告**：符合 PRD 的隐私要求；如需数据仅启用无 Cookie 的站点分析。
+
+> **⚠️ 实现偏离（图片存储：R2 → Workers KV，已回写）**
+>
+> 原计划图片/对象存储用 **Cloudflare R2**；实际部署时发现 **R2 必须先绑定银行卡才能启用**，而本项目不打算绑卡，
+> 故改用 **Workers KV**（绑定名仍为 `MEDIA`，只换后端实现，代码侧绑定名不变）。KV 免费额度无需绑卡
+> （1GB 存储 / 10 万次读每天 / 1000 次写每天），对个人站图片量够用。已在本地跑通上传 / 读取 / 删除共 8 项端到端验证。
+>
+> **配置与代码落点**：
+> - `wrangler.toml`：绑定由 `[[r2_buckets]]` 换成 `[[kv_namespaces]]`（namespace `portfolio-media`，id `1d7f23db431f4417a4f028187409244c`）。
+> - 入口：`apps/web/src/lib/server/storage.ts` 的 `getMediaStore()`（原 `getMediaBucket()`）；读写 key 形态 `{yyyy}/{mm}/{uuid}.{ext}`，MIME 与原始文件名存 KV metadata。
+> - 读取端点：`apps/web/src/pages/media/[...key].ts`（响应头 `content-type`、`cache-control: public, max-age=31536000, immutable`、`x-content-type-options: nosniff`）。
+> - 上传顺序不变：**先写存储（KV）再写 `media` 表**，写库失败则回滚已上传对象，避免孤儿文件。
+>
+> **与 R2 的差异（已知代价）**：
+> 1. 单值上限 25MiB（上传接口本就限制 5MB，不构成问题）。
+> 2. 写入是**最终一致**的（全球同步约 60 秒）；缓解措施：key 含 uuid、内容永不覆写（同一位置写后读一致），读取端走 immutable 长缓存。
+> 3. 宽高解析只支持 PNG / GIF（JPEG / WebP 解析变长段结构需引库，不值得；这两种返回 `null`，前端按默认宽高比预留空间）。
 
 ---
 
@@ -93,7 +110,7 @@ portfolio/
 ├─ AGENTS.md                  AI 开发规范
 ├─ package.json               工作区脚本（dev / build / test / migrate）
 ├─ pnpm-workspace.yaml
-├─ wrangler.toml              D1/R2 绑定与环境变量声明（**不写 main/assets**，原因见 §5.2）
+├─ wrangler.toml              D1/KV 绑定与环境变量声明（**不写 main/assets**，原因见 §5.2）
 ├─ tsconfig.base.json         共享 TS 配置（strict）
 ├─ .dev.vars.example          本地环境变量样例（真实值不进仓库）
 │
@@ -144,7 +161,7 @@ portfolio/
 │   │   │   ├─ repositories/  数据访问层（每个实体一个文件）
 │   │   │   ├─ auth.ts        Access JWT 校验与会话身份
 │   │   │   ├─ cache.ts       边缘缓存读写与版本键
-│   │   │   └─ storage.ts     R2 读写与 key 生成
+│   │   │   └─ storage.ts     KV 读写与 key 生成
 │   │   └─ public/            静态资源（favicon / 默认分享图 / 字体）
 │   │
 │   └─ admin/                  后台 SPA（React + Vite）
@@ -239,13 +256,13 @@ skill_groups 1───n skills
 projects 1───n project_tags n───1 tags
 posts    1───n post_tags    n───1 tags
 
-media        （独立，被 profile / projects / posts 以 object key 引用）
+media        （独立，被 profile / projects / posts 以存储 key 引用）
 settings     （键值表：站点级配置）
 messages     （留言，独立）
 content_revisions （快照，按 entity_type + entity_id 关联到上面各实体）
 ```
 
-**关于图片引用**：`media` 与内容表之间不做外键，而是以 **R2 object key** 弱引用（`avatar_key`、`cover_key` 等）。这样做的好处是内容表不被存储层绑死；代价是需要一个「引用扫描」来统计图片被谁使用（在删除图片时提示影响范围，对应 PRD AC5.5）。
+**关于图片引用**：`media` 与内容表之间不做外键，而是以**存储 key**（KV key）弱引用（`avatar_key`、`cover_key` 等）。这样做的好处是内容表不被存储层绑死；代价是需要一个「引用扫描」来统计图片被谁使用（在删除图片时提示影响范围，对应 PRD AC5.5）。
 
 ### 3.3 表结构（D1 / SQLite）
 
@@ -259,7 +276,7 @@ content_revisions （快照，按 entity_type + entity_id 关联到上面各实�
 | `display_name` | TEXT NOT NULL | 姓名/昵称 |
 | `headline` | TEXT | 一句话定位（首页 Hero） |
 | `about_md` | TEXT | 长版简介（Markdown，关于页） |
-| `avatar_key` | TEXT | R2 头像 key |
+| `avatar_key` | TEXT | KV 头像 key |
 | `location` | TEXT | 所在地 |
 | `status` | TEXT | 当前状态，如「开放合作」 |
 | `email` | TEXT | 联系邮箱 |
@@ -283,7 +300,7 @@ content_revisions （快照，按 entity_type + entity_id 关联到上面各实�
 | `slug` | TEXT UNIQUE | 英文短语，路由与链接用 |
 | `title` / `summary` | TEXT | 标题与一句话摘要 |
 | `content_md` | TEXT | Markdown 正文 |
-| `cover_key` | TEXT | 封面 R2 key |
+| `cover_key` | TEXT | 封面 KV key |
 | `repo_url` / `demo_url` | TEXT | 仓库与演示地址 |
 | `status` | TEXT | `active` / `completed` / `archived` |
 | `featured` | INTEGER | 0/1，首页精选（对应 PRD AC3.1） |
@@ -314,12 +331,12 @@ content_revisions （快照，按 entity_type + entity_id 关联到上面各实�
 | `post_tags` | `post_id → posts.id`, `tag_id → tags.id` | 复合主键 |
 | `project_tags` | `project_id → projects.id`, `tag_id → tags.id` | 复合主键 |
 
-**media** — 已上传资源索引（真实文件在 R2）
+**media** — 已上传资源索引（真实文件在 KV）
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `id` | INTEGER PK | |
-| `key` | TEXT UNIQUE | R2 object key，命名规则见 §4.7 |
+| `key` | TEXT UNIQUE | 存储 key（KV key），命名规则见 §4.7 |
 | `mime` | TEXT | 由文件头判定，不看扩展名 |
 | `size_bytes` | INTEGER | 上传时校验用 |
 | `width` / `height` | INTEGER | 可空，用于预留宽高比防布局跳动 |
@@ -491,9 +508,9 @@ content_revisions （快照，按 entity_type + entity_id 关联到上面各实�
 **做法**：
 1. `key` 命名规则：`{yyyy}/{mm}/{uuid}.{ext}`（如 `2026/10/3f9a...c1.webp`），时间前缀便于按时间清理与排查。
 2. **服务端判定 MIME**：读取文件头魔数，不信任扩展名与 `Content-Type`；只接受 jpg/png/webp/gif。
-3. 体积上限 5MB（PRD AC5.4），超限返回字段级错误；同时校验宽高并把 `width/height` 落库，供前端预留宽高比、**消除布局跳动**。
-4. 上传落 `media` 表并与 R2 写入保持一致的失败处理：**先写 R2 再写库**，写库失败则删除已上传对象，避免出现「库里没有但占着存储」的孤儿文件。
-5. R2 不直接开公开桶，通过受控路由/自定义域暴露，避免对象被枚举。
+3. 体积上限 5MB（PRD AC5.4），超限返回字段级错误；同时校验宽高并把 `width/height` 落库，供前端预留宽高比、**消除布局跳动**（现状：宽高解析只覆盖 PNG / GIF，JPEG / WebP 返回 `null`，前端按默认宽高比预留，见 §1.5 偏离说明）。
+4. 上传落 `media` 表并与 KV 写入保持一致的失败处理：**先写 KV 再写库**，写库失败则删除已上传对象，避免出现「库里没有但占着存储」的孤儿文件。
+5. KV 本就不公开（没有公开桶的概念），仍只经受控路由暴露（`apps/web/src/pages/media/[...key].ts`），避免资源被枚举。
 6. 展示层用响应式图片（`<picture>` + AVIF/WebP + `srcset`）+ 懒加载（首屏封面除外），并显式给出宽高，避免 CLS。
 
 ### 4.8 鉴权与安全（双层防线）
@@ -512,7 +529,7 @@ content_revisions （快照，按 entity_type + entity_id 关联到上面各实�
 
 **做法**：
 1. 迁移文件放 `migrations/`，用 `wrangler d1 migrations` 管理；**已应用的迁移文件不得修改**，一切变更新增文件（这条写进了 AGENTS.md，因为它是最容易被 AI 忽略、又最难回滚的错误）。
-2. 本地开发用 `pnpm dev`（`astro dev`；D1 / R2 绑定由 Cloudflare Vite 插件从根 `wrangler.toml` 注入，状态目录固定在根 `.wrangler/state`）。需要更贴近线上运行时，用 `pnpm preview`（`wrangler dev`，跑的是**构建产物**）。迁移与种子走 CLI（`pnpm db:migrate:local` / `pnpm db:seed`），保证「本地能跑通的东西线上也能跑」。
+2. 本地开发用 `pnpm dev`（`astro dev`；D1 / KV 绑定由 Cloudflare Vite 插件从根 `wrangler.toml` 注入，状态目录固定在根 `.wrangler/state`）。需要更贴近线上运行时，用 `pnpm preview`（`wrangler dev`，跑的是**构建产物**）。迁移与种子走 CLI（`pnpm db:migrate:local` / `pnpm db:seed`），保证「本地能跑通的东西线上也能跑」。
 3. `scripts/seed.ts` 提供演示数据，让本地开发不依赖线上库。
 4. 备份：`/api/admin/export` 导出全量 JSON；重建路径是「建库 → 迁移 → 导入」，因此不锁定在 D1（对应 PRD 的平台锁定风险应对）。
 
@@ -535,7 +552,7 @@ content_revisions （快照，按 entity_type + entity_id 关联到上面各实�
 - **日志**：Workers 日志在 Cloudflare 面板查看；接口统一在 `src/middleware.ts` 里输出结构化日志（路径、耗时、状态码、是否命中缓存）。**不记录**访客 IP 明文与邮箱。
 - **错误上报**：可选接入边缘友好的错误收集；不上报则至少保证失败有明确响应体，便于排查。
 - **统计**：仅使用无 Cookie 的站点分析（符合 PRD 隐私要求）。
-- **免费额度边界**（需要心里有数）：Workers 每日请求数、Workers Builds 每月构建次数、Access 免费用户数上限、D1 的每日读写行数、R2 存储与出站。个人站正常使用远低于这些上限，但要避免**把大图转码或批量任务塞进请求路径**，那才是配额与 CPU 时间的真实杀手。
+- **免费额度边界**（需要心里有数）：Workers 每日请求数、Workers Builds 每月构建次数、Access 免费用户数上限、D1 的每日读写行数、KV 的存储与读写次数。个人站正常使用远低于这些上限，但要避免**把大图转码或批量任务塞进请求路径**，那才是配额与 CPU 时间的真实杀手。
 
 ---
 
@@ -547,7 +564,7 @@ content_revisions （快照，按 entity_type + entity_id 关联到上面各实�
 | --- | --- | --- | --- |
 | 本地 | 开发与自测 | 本地 D1（wrangler） | 本地中间件可放行（仅开发环境，需显式开关） |
 | 预览 | 每次推送自动生成 | 预览用 D1 或共享开发数据 | 与生产同策略，避免预览环境裸奔 |
-| 生产 | 线上 | 生产 D1 + R2 | Access 严格策略 |
+| 生产 | 线上 | 生产 D1 + KV | Access 严格策略 |
 
 **原则**：预览环境的后台也必须有访问控制。否则「预览链接泄漏 = 后台裸奔」是最容易被忽视的事故。
 
@@ -563,7 +580,7 @@ git push（主分支）
   → 构建（pnpm build = shared → web → admin，含把后台产物搬进静态资源目录）
   → 产出：apps/web/dist/server/entry.mjs（Worker 入口）+ apps/web/dist/client（静态资源，其中 admin/ 是后台）
   → 部署（npx wrangler deploy --config apps/web/dist/server/wrangler.json）
-  → 绑定 D1（DB）与 R2（MEDIA）
+  → 绑定 D1（DB）与 KV（MEDIA）
 ```
 
 **控制台关键填写项**（选错会导致构建失败或产物找不到）：
@@ -574,7 +591,7 @@ git push（主分支）
 | 构建命令 | `pnpm install && pnpm build` |
 | 部署命令 | `npx wrangler deploy --config apps/web/dist/server/wrangler.json` |
 | 环境变量 | `NODE_VERSION=20`，并补齐 `SITE_URL` 等（§5.4） |
-| 绑定 | D1 变量名 `DB`、R2 变量名 `MEDIA`。**Git 集成部署不会自动读取 `wrangler.toml` 的绑定，必须在控制台手动添加** |
+| 绑定 | D1 变量名 `DB`、KV 变量名 `MEDIA`。**Git 集成部署不会自动读取 `wrangler.toml` 的绑定，必须在控制台手动添加** |
 
 **`main` / `assets` 为什么不写在根 `wrangler.toml`**：这两个字段指向的文件是**构建产物**，
 而构建期间 `@cloudflare/vite-plugin` 会先校验配置里的 `main` 是否已存在 —— 写上去会让首次构建
