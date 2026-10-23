@@ -23,6 +23,10 @@ interface Env {
   ACCESS_TEAM_DOMAIN?: string;
   /** Access 应用的 AUD 标签，用于校验 JWT 的 aud */
   ACCESS_JWT_AUD?: string;
+  /** 自建密码登录：管理密码（Secret，生产用 wrangler secret 配置，不进仓库） */
+  ADMIN_PASSWORD?: string;
+  /** 自建密码登录：会话签名密钥（Secret，独立于密码，泄露密码不会直接伪造会话） */
+  ADMIN_SESSION_SECRET?: string;
   /**
    * 本地开发放行开关：仅当显式等于 '1' 时，才在缺少 Access 的环境中放行后台。
    * 默认关闭，绝不允许写成「开发环境恒为 true」的后门。

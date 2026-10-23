@@ -9,8 +9,8 @@
  * Cloudflare Workers，能力与约束不变，只是文件位置变了。
  */
 import { defineMiddleware } from 'astro:middleware';
-import { requireAdminIdentity } from './lib/server/auth';
-import { errorResponse, internalErrorResponse, NO_STORE_HEADERS, SECURITY_HEADERS } from './lib/server/http';
+import { requireAdminIdentity, verifyAdminSession } from './lib/server/auth';
+import { errorResponse, internalErrorResponse, SECURITY_HEADERS } from './lib/server/http';
 import { getRuntimeEnv } from './lib/server/runtime-env';
 
 /** 需要后台身份才能访问的路径前缀。 */
@@ -24,31 +24,21 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const { pathname } = context.url;
 
   if (isProtected(pathname)) {
-    const identity = await requireAdminIdentity(context.request, getRuntimeEnv());
+    const env = getRuntimeEnv();
+    // 双层防线：优先 Cloudflare Access；未配置或未通过时，回退到自建密码会话。
+    const identity =
+      (await requireAdminIdentity(context.request, env)) ?? (await verifyAdminSession(context.request, env));
 
     if (!identity) {
       // 未通过鉴权时：接口返回 401 且**不含任何数据**；
-      // 页面跳到一个明确的拒绝提示，不泄露后台是否存在哪些资源。
+      // 页面跳到登录页，不泄露后台是否存在哪些资源。
       if (pathname.startsWith('/api/')) {
         return errorResponse('UNAUTHORIZED', '需要登录后台才能访问。', { status: 401 });
       }
 
-      return new Response(
-        `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
-         <meta name="viewport" content="width=device-width, initial-scale=1">
-         <meta name="robots" content="noindex, nofollow">
-         <title>401 · 需要登录</title>
-         <style>html{background:#0a0b14;color:#eceef7;font-family:system-ui,sans-serif}
-         body{display:grid;min-height:100vh;margin:0;place-items:center;text-align:center}
-         p{color:#a6abc2;max-width:44ch;line-height:1.7}</style></head>
-         <body><main><h1>401 · 需要登录</h1>
-         <p>后台由 Cloudflare Access 保护。请通过 Access 完成身份验证后再访问。</p>
-         </main></body></html>`,
-        {
-          status: 401,
-          headers: { 'content-type': 'text/html; charset=utf-8', ...SECURITY_HEADERS, ...NO_STORE_HEADERS },
-        },
-      );
+      const loginUrl = new URL('/admin-login', context.url);
+      loginUrl.searchParams.set('next', pathname);
+      return Response.redirect(loginUrl, 302);
     }
 
     // 身份存入 locals，后续 endpoint 直接复用，避免重复校验 JWT

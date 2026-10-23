@@ -30,6 +30,100 @@ type JwkKey = { kid?: string; kty: string; n: string; e: string; alg?: string; u
 let cachedKeys: { keys: JwkKey[]; fetchedAt: number } | null = null;
 const JWKS_TTL_MS = 60 * 60 * 1000;
 
+/** 自建密码登录的会话 cookie 名与有效期（Access 不可用时的兜底方案）。 */
+export const ADMIN_COOKIE_NAME = 'pf_admin';
+const ADMIN_SESSION_TTL_SECONDS = 12 * 60 * 60;
+
+/** 密码登录是否已启用：两个变量缺一不可，缺任一都按「未启用」处理（fail closed）。 */
+export function isPasswordLoginConfigured(env: Env | undefined): boolean {
+  return Boolean(env?.ADMIN_PASSWORD && env?.ADMIN_SESSION_SECRET);
+}
+
+/** 长度不一致直接失败；长度一致时按位异或累计，避免按字符提前返回。 */
+function safeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let index = 0; index < a.length; index += 1) {
+    diff |= a.charCodeAt(index) ^ b.charCodeAt(index);
+  }
+  return diff === 0;
+}
+
+async function signSession(secret: string, expiresAt: number): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const signature = await crypto.subtle.sign(
+    'HMAC',
+    key,
+    new TextEncoder().encode(`admin-session:${expiresAt}`),
+  );
+  return Array.from(new Uint8Array(signature))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/** 读取指定名称的 cookie；没有则返回 null。 */
+export function readCookie(request: Request, name: string): string | null {
+  const cookie = request.headers.get('Cookie');
+  if (!cookie) return null;
+  for (const part of cookie.split(';')) {
+    const [key, ...rest] = part.trim().split('=');
+    if (key === name) return rest.join('=');
+  }
+  return null;
+}
+
+/** 校验密码：未配置时一律失败；配置后按常量时间比较。 */
+export function verifyAdminPassword(env: Env | undefined, password: string): boolean {
+  const expected = env?.ADMIN_PASSWORD;
+  if (!expected) return false;
+  return safeEqual(expected, password);
+}
+
+/** 生成会话 cookie：值为 `过期时间戳.签名`，签名由独立密钥计算。 */
+export async function createAdminSessionCookie(env: Env | undefined): Promise<string | null> {
+  if (!isPasswordLoginConfigured(env)) return null;
+  const expiresAt = Date.now() + ADMIN_SESSION_TTL_SECONDS * 1000;
+  const signature = await signSession(env!.ADMIN_SESSION_SECRET!, expiresAt);
+  return [
+    `${ADMIN_COOKIE_NAME}=${expiresAt}.${signature}`,
+    'Path=/',
+    `Max-Age=${ADMIN_SESSION_TTL_SECONDS}`,
+    'HttpOnly',
+    'Secure',
+    'SameSite=Lax',
+  ].join('; ');
+}
+
+/** 清除会话 cookie。 */
+export function clearAdminSessionCookie(): string {
+  return `${ADMIN_COOKIE_NAME}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`;
+}
+
+/** 校验自建会话 cookie；失败返回 null，调用方必须据此拒绝。 */
+export async function verifyAdminSession(
+  request: Request,
+  env: Env | undefined,
+): Promise<AdminIdentity | null> {
+  if (!isPasswordLoginConfigured(env)) return null;
+  const raw = readCookie(request, ADMIN_COOKIE_NAME);
+  if (!raw) return null;
+
+  const [expiresRaw, signature] = raw.split('.');
+  const expiresAt = Number(expiresRaw);
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now() || !signature) return null;
+
+  const expected = await signSession(env!.ADMIN_SESSION_SECRET!, expiresAt);
+  if (!safeEqual(signature, expected)) return null;
+
+  return { email: 'password-admin@local', subject: 'password-admin' };
+}
+
 /**
  * 判断是否允许「无 Access 环境」放行。
  * 必须由显式环境变量开启，默认关闭 —— 禁止写 `if (isDev) return true` 这类后门。

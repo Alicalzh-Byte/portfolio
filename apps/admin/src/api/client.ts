@@ -76,6 +76,16 @@ async function request<T>(path: string, init: RequestInit): Promise<T> {
   }
 
   let payload: unknown;
+  // 未登录或会话过期：统一回登录页，避免每个页面各自处理 401
+  if (response.status === 401 && typeof window !== 'undefined') {
+    const next = encodeURIComponent(`${window.location.pathname}${window.location.search}`);
+    window.location.replace(`/admin-login?next=${next}`);
+    throw new ApiRequestError({
+      code: 'UNAUTHORIZED',
+      message: '登录已过期，请重新登录。',
+      status: 401,
+    });
+  }
   try {
     payload = await response.json();
   } catch {
