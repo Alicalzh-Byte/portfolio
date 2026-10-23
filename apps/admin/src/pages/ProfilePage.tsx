@@ -100,10 +100,13 @@ export function ProfilePage() {
       });
 
       if (!parsed.success) {
+        const fields = toFieldErrors(parsed.error);
         throw new ApiRequestError({
           code: 'VALIDATION_FAILED',
-          message: '请检查表单填写',
-          fields: toFieldErrors(parsed.error),
+          // 有些字段（如社交链接）不在表单里，把第一条具体原因直接显示出来，
+          // 避免只剩一句「请检查表单填写」找不到问题。
+          message: Object.values(fields)[0] ?? '请检查表单填写',
+          fields,
         });
       }
 

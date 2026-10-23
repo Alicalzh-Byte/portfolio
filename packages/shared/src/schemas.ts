@@ -49,13 +49,23 @@ const emailField = z
   .max(254, '邮箱过长')
   .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, '邮箱格式不正确');
 
+/**
+ * 社交链接：允许 http/https 与 mailto。
+ * mailto 只用于「邮箱」这类联系方式，不会执行脚本；其它协议（javascript: 等）仍被挡掉。
+ */
+const socialUrlField = z
+  .string()
+  .trim()
+  .max(500, '链接过长')
+  .regex(/^(https?:\/\/|mailto:)[^\s]+$/i, '链接必须以 http://、https:// 或 mailto: 开头');
+
 /* ------------------------------------------------------------------ *
  * profile（F1）
  * ------------------------------------------------------------------ */
 
 export const socialLinkSchema = z.object({
   label: z.string().trim().min(1, '标签不能为空').max(30),
-  url: httpUrlField,
+  url: socialUrlField,
   icon: z.string().trim().max(30).optional(),
 });
 
