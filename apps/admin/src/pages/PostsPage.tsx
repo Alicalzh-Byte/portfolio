@@ -1,7 +1,8 @@
 import { postInputSchema, toFieldErrors } from '@portfolio/shared/schemas';
 import { ADMIN_API } from '@portfolio/shared/api';
+import type { PostSummary } from '@portfolio/shared/types';
 import type { FormEvent } from 'react';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, apiClient } from '../api/client';
 import { EmptyState } from '../components/EmptyState';
 import { FormFeedback } from '../components/FormFeedback';
@@ -21,6 +22,7 @@ type PostForm = {
   summary: string;
   status: string;
   contentMd: string;
+  tagNames: string;
 };
 
 const INITIAL_FORM: PostForm = {
@@ -29,16 +31,36 @@ const INITIAL_FORM: PostForm = {
   summary: '',
   status: 'draft',
   contentMd: '',
+  tagNames: '',
 };
 
-/**
- * 文章页（F4）：列表壳（空状态）+ 文章编辑器脚手架。
- * 编辑器内置 Markdown 源码与实时预览，预览复用 `@portfolio/shared/markdown` 的唯一渲染实现。
- */
+/** 文章页（F4）：后台文章列表 + 撰写 / 发布 / 删除。 */
 export function PostsPage() {
+  const [posts, setPosts] = useState<PostSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [actionMessage, setActionMessage] = useState('');
   const [showEditor, setShowEditor] = useState(false);
   const [form, setForm] = useState<PostForm>(INITIAL_FORM);
   const { status, message, fieldErrors, isSaving, run, reset } = useSubmitState();
+
+  const load = useCallback(async () => {
+    try {
+      const data = await apiClient.get<{ items: PostSummary[] }>(
+        `${ADMIN_API.posts}?status=all&pageSize=100`,
+      );
+      setPosts(data.items);
+      setLoadError('');
+    } catch (error) {
+      setLoadError(error instanceof ApiRequestError ? error.message : '读取文章失败');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   function update<K extends keyof PostForm>(key: K, value: PostForm[K]) {
     setForm((previous) => ({ ...previous, [key]: value }));
@@ -53,7 +75,10 @@ export function PostsPage() {
         summary: form.summary.trim() || null,
         contentMd: form.contentMd,
         status: form.status,
-        tagNames: [],
+        tagNames: form.tagNames
+          .split(/[,，]/)
+          .map((tag) => tag.trim())
+          .filter(Boolean),
       });
 
       if (!parsed.success) {
@@ -72,6 +97,28 @@ export function PostsPage() {
       setForm(INITIAL_FORM);
       setShowEditor(false);
       reset();
+      await load();
+    }
+  }
+
+  async function publish(post: PostSummary) {
+    try {
+      await apiClient.post(ADMIN_API.postPublish(post.id), {});
+      setActionMessage(`「${post.title}」已发布`);
+      await load();
+    } catch (error) {
+      setActionMessage(error instanceof ApiRequestError ? error.message : '发布失败');
+    }
+  }
+
+  async function remove(post: PostSummary) {
+    if (!window.confirm(`确定删除文章「${post.title}」？删除前会自动保存一份快照。`)) return;
+    try {
+      await apiClient.delete(`${ADMIN_API.posts}/${post.id}`);
+      setActionMessage('文章已删除');
+      await load();
+    } catch (error) {
+      setActionMessage(error instanceof ApiRequestError ? error.message : '删除失败');
     }
   }
 
@@ -126,6 +173,15 @@ export function PostsPage() {
                 error={fieldErrors.status}
                 disabled={isSaving}
               />
+              <TextField
+                id="post-tags"
+                label="标签"
+                value={form.tagNames}
+                onChange={(value) => update('tagNames', value)}
+                disabled={isSaving}
+                placeholder="Astro, Cloudflare"
+                hint="用逗号分隔，最多 12 个"
+              />
             </div>
 
             <div className="form-grid form-grid--single">
@@ -169,8 +225,12 @@ export function PostsPage() {
           <h2 className="section__title" id="posts-list-title">
             文章列表
           </h2>
-          <p className="section__note">列表数据将在接口接入后加载</p>
+          <p className="section__note">{loading ? '正在读取…' : `共 ${posts.length} 篇`}</p>
         </div>
+
+        {loadError ? <p className="muted">{loadError}</p> : null}
+        {actionMessage ? <p className="muted">{actionMessage}</p> : null}
+
         <div className="table-wrap">
           <table className="table">
             <caption className="sr-only">文章列表</caption>
@@ -181,17 +241,42 @@ export function PostsPage() {
                 <th scope="col">发布于</th>
                 <th scope="col">阅读时长</th>
                 <th scope="col">浏览</th>
+                <th scope="col">操作</th>
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td colSpan={5}>
-                  <EmptyState
-                    title="还没有文章"
-                    description="点击「撰写文章」开始写作，或等待接口接入后自动加载现有文章。"
-                  />
-                </td>
-              </tr>
+              {posts.length === 0 ? (
+                <tr>
+                  <td colSpan={6}>
+                    <EmptyState
+                      title="还没有文章"
+                      description="点击「撰写文章」开始写作。"
+                    />
+                  </td>
+                </tr>
+              ) : (
+                posts.map((post) => (
+                  <tr key={post.id}>
+                    <td>{post.title}</td>
+                    <td>{post.status === 'published' ? '已发布' : '草稿'}</td>
+                    <td>{post.publishedAt ? post.publishedAt.slice(0, 19).replace('T', ' ') : '—'}</td>
+                    <td>{post.readingMinutes} 分钟</td>
+                    <td>{post.viewCount}</td>
+                    <td>
+                      <span className="row-actions">
+                        {post.status === 'draft' ? (
+                          <button type="button" className="btn btn--ghost" onClick={() => void publish(post)}>
+                            发布
+                          </button>
+                        ) : null}
+                        <button type="button" className="btn btn--ghost" onClick={() => void remove(post)}>
+                          删除
+                        </button>
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

@@ -1,4 +1,7 @@
+import { useEffect } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
+import { ADMIN_API } from '@portfolio/shared/api';
+import { apiClient } from '../api/client';
 
 /** 侧边栏导航项：与 PRD 站点地图的七个后台路由一一对应。 */
 const NAV_ITEMS = [
@@ -16,6 +19,12 @@ const NAV_ITEMS = [
  * 语义landmark：header / nav / main，并提供「跳到主内容」链接（PRD §5.8）。
  */
 export function AdminLayout() {
+  // 进入后台先做一次鉴权探测：未登录时请求会拿到 401，客户端统一跳转登录页，
+  // 避免用户先看到后台外壳、点保存才发现没登录。
+  useEffect(() => {
+    void apiClient.get(ADMIN_API.profile).catch(() => undefined);
+  }, []);
+
   return (
     <div className="admin-shell">
       <a className="skip-link" href="#admin-main">

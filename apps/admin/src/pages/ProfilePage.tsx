@@ -1,7 +1,8 @@
 import { profileUpdateSchema, toFieldErrors } from '@portfolio/shared/schemas';
 import { ADMIN_API } from '@portfolio/shared/api';
+import type { Profile, SocialLink } from '@portfolio/shared/types';
 import type { FormEvent } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ApiRequestError, apiClient } from '../api/client';
 import { FormFeedback } from '../components/FormFeedback';
 import { TextAreaField, TextField } from '../components/FormField';
@@ -34,6 +35,49 @@ const INITIAL_FORM: ProfileForm = {
 export function ProfilePage() {
   const [form, setForm] = useState<ProfileForm>(INITIAL_FORM);
   const { status, message, fieldErrors, isSaving, run } = useSubmitState();
+  // 头像、简历、社交链接与隐藏字段不在表单里直接编辑，但保存时必须原样带回，
+  // 否则一次保存就会把它们清空。
+  const [avatarKey, setAvatarKey] = useState<string | null>(null);
+  const [resumeKey, setResumeKey] = useState<string | null>(null);
+  const [socialLinks, setSocialLinks] = useState<SocialLink[]>([]);
+  const [hiddenFields, setHiddenFields] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const profile = await apiClient.get<Profile | null>(ADMIN_API.profile);
+        if (cancelled || !profile) return;
+        setForm({
+          displayName: profile.displayName,
+          headline: profile.headline ?? '',
+          location: profile.location ?? '',
+          status: profile.status ?? '',
+          email: profile.email ?? '',
+          aboutMd: profile.aboutMd ?? '',
+        });
+        setAvatarKey(profile.avatarKey);
+        setResumeKey(profile.resumeKey);
+        setSocialLinks(profile.socialLinks);
+        setHiddenFields(profile.hiddenFields);
+      } catch (error) {
+        if (!cancelled) {
+          setLoadError(
+            error instanceof ApiRequestError ? error.message : '读取个人信息失败，请刷新重试。',
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function update<K extends keyof ProfileForm>(key: K, value: ProfileForm[K]) {
     setForm((previous) => ({ ...previous, [key]: value }));
@@ -49,8 +93,10 @@ export function ProfilePage() {
         location: form.location.trim() || null,
         status: form.status.trim() || null,
         email: form.email.trim() || null,
-        socialLinks: [],
-        hiddenFields: [],
+        socialLinks,
+        hiddenFields,
+        avatarKey,
+        resumeKey,
       });
 
       if (!parsed.success) {
@@ -74,6 +120,8 @@ export function ProfilePage() {
       />
 
       <form className="card" onSubmit={handleSubmit} noValidate>
+        {loading && <p className="muted">正在读取个人信息…</p>}
+        {loadError && <p className="muted">{loadError}</p>}
         <div className="form-grid">
           <TextField
             id="profile-displayName"
@@ -82,7 +130,7 @@ export function ProfilePage() {
             onChange={(value) => update('displayName', value)}
             error={fieldErrors.displayName}
             required
-            disabled={isSaving}
+            disabled={isSaving || loading}
             autoComplete="name"
           />
           <TextField
@@ -91,7 +139,7 @@ export function ProfilePage() {
             value={form.headline}
             onChange={(value) => update('headline', value)}
             error={fieldErrors.headline}
-            disabled={isSaving}
+            disabled={isSaving || loading}
             hint="展示在姓名下方，建议 30 字以内"
           />
           <TextField
@@ -100,7 +148,7 @@ export function ProfilePage() {
             value={form.location}
             onChange={(value) => update('location', value)}
             error={fieldErrors.location}
-            disabled={isSaving}
+            disabled={isSaving || loading}
           />
           <TextField
             id="profile-status"
@@ -108,7 +156,7 @@ export function ProfilePage() {
             value={form.status}
             onChange={(value) => update('status', value)}
             error={fieldErrors.status}
-            disabled={isSaving}
+            disabled={isSaving || loading}
             hint="例如：可接受合作 / 正在求职"
           />
           <TextField
@@ -118,7 +166,7 @@ export function ProfilePage() {
             value={form.email}
             onChange={(value) => update('email', value)}
             error={fieldErrors.email}
-            disabled={isSaving}
+            disabled={isSaving || loading}
             autoComplete="email"
           />
         </div>
@@ -130,14 +178,14 @@ export function ProfilePage() {
             value={form.aboutMd}
             onChange={(value) => update('aboutMd', value)}
             error={fieldErrors.aboutMd}
-            disabled={isSaving}
+            disabled={isSaving || loading}
             rows={8}
             placeholder="支持 Markdown 语法，线上将用同一渲染管线输出。"
           />
         </div>
 
         <div className="form-actions">
-          <button type="submit" className="btn btn--primary" disabled={isSaving}>
+          <button type="submit" className="btn btn--primary" disabled={isSaving || loading}>
             {isSaving ? '保存中…' : '保存'}
           </button>
           <FormFeedback status={status} message={message} />

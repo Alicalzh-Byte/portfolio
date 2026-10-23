@@ -689,6 +689,102 @@ a:hover {
 }
 
 /* --------------------------------------------------------------------------
+   数据列表与媒体网格（后台真实数据展示）
+   -------------------------------------------------------------------------- */
+
+.stack {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.group-block {
+  padding: var(--space-4) var(--space-5);
+}
+
+.group-block__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.group-block__title {
+  margin: 0;
+  font-size: 16px;
+}
+
+.group-block__head .btn {
+  margin-left: auto;
+}
+
+.skill-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.skill-list__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.skill-list__item:first-child {
+  border-top: none;
+}
+
+.row-actions {
+  display: inline-flex;
+  gap: var(--space-2);
+}
+
+.media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-4);
+}
+
+.media-item {
+  margin: 0;
+  background: var(--bg-elev-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.media-item__thumb {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  display: block;
+  background: var(--bg-elev-2);
+}
+
+.media-item__meta {
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: 13px;
+}
+
+.media-item__name {
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.media-item__meta .btn {
+  align-self: flex-start;
+}
+
+/* --------------------------------------------------------------------------
    动效降级：prefers-reduced-motion 下取消位移（PRD §5.7）
    -------------------------------------------------------------------------- */
 

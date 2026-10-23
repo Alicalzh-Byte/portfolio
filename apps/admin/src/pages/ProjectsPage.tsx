@@ -1,7 +1,8 @@
 import { projectInputSchema, toFieldErrors } from '@portfolio/shared/schemas';
 import { ADMIN_API } from '@portfolio/shared/api';
+import type { ProjectSummary } from '@portfolio/shared/types';
 import type { FormEvent } from 'react';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, apiClient } from '../api/client';
 import { EmptyState } from '../components/EmptyState';
 import { FormFeedback } from '../components/FormFeedback';
@@ -15,12 +16,19 @@ const STATUS_OPTIONS = [
   { value: 'archived', label: '已归档' },
 ] as const;
 
+const STATUS_LABEL: Record<string, string> = {
+  active: '进行中',
+  completed: '已完成',
+  archived: '已归档',
+};
+
 type ProjectForm = {
   slug: string;
   title: string;
   summary: string;
   status: string;
   featured: boolean;
+  tagNames: string;
 };
 
 const INITIAL_FORM: ProjectForm = {
@@ -29,13 +37,34 @@ const INITIAL_FORM: ProjectForm = {
   summary: '',
   status: 'active',
   featured: false,
+  tagNames: '',
 };
 
-/** 项目页（F3）：工具栏 + 表格壳（空状态）+ 新建项目表单脚手架。 */
+/** 项目页（F3）：项目列表 + 新建 / 删除。 */
 export function ProjectsPage() {
+  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [actionMessage, setActionMessage] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<ProjectForm>(INITIAL_FORM);
   const { status, message, fieldErrors, isSaving, run, reset } = useSubmitState();
+
+  const load = useCallback(async () => {
+    try {
+      const data = await apiClient.get<{ items: ProjectSummary[] }>(`${ADMIN_API.projects}?pageSize=100`);
+      setProjects(data.items);
+      setLoadError('');
+    } catch (error) {
+      setLoadError(error instanceof ApiRequestError ? error.message : '读取项目失败');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   function update<K extends keyof ProjectForm>(key: K, value: ProjectForm[K]) {
     setForm((previous) => ({ ...previous, [key]: value }));
@@ -50,7 +79,10 @@ export function ProjectsPage() {
         summary: form.summary.trim() || null,
         status: form.status,
         featured: form.featured,
-        tagNames: [],
+        tagNames: form.tagNames
+          .split(/[,，]/)
+          .map((tag) => tag.trim())
+          .filter(Boolean),
       });
 
       if (!parsed.success) {
@@ -69,6 +101,18 @@ export function ProjectsPage() {
       setForm(INITIAL_FORM);
       setShowForm(false);
       reset();
+      await load();
+    }
+  }
+
+  async function deleteProject(project: ProjectSummary) {
+    if (!window.confirm(`确定删除项目「${project.title}」？删除前会自动保存一份快照。`)) return;
+    try {
+      await apiClient.delete(`${ADMIN_API.projects}/${project.id}`);
+      setActionMessage('项目已删除');
+      await load();
+    } catch (error) {
+      setActionMessage(error instanceof ApiRequestError ? error.message : '删除项目失败');
     }
   }
 
@@ -122,6 +166,15 @@ export function ProjectsPage() {
                 error={fieldErrors.status}
                 disabled={isSaving}
               />
+              <TextField
+                id="project-tags"
+                label="标签"
+                value={form.tagNames}
+                onChange={(value) => update('tagNames', value)}
+                disabled={isSaving}
+                placeholder="React, TypeScript"
+                hint="用逗号分隔，最多 12 个"
+              />
             </div>
             <div className="form-grid form-grid--single">
               <TextAreaField
@@ -161,8 +214,12 @@ export function ProjectsPage() {
           <h2 className="section__title" id="projects-list-title">
             项目列表
           </h2>
-          <p className="section__note">列表数据将在接口接入后加载</p>
+          <p className="section__note">{loading ? '正在读取…' : `共 ${projects.length} 个项目`}</p>
         </div>
+
+        {loadError ? <p className="muted">{loadError}</p> : null}
+        {actionMessage ? <p className="muted">{actionMessage}</p> : null}
+
         <div className="table-wrap">
           <table className="table">
             <caption className="sr-only">项目列表</caption>
@@ -173,17 +230,35 @@ export function ProjectsPage() {
                 <th scope="col">状态</th>
                 <th scope="col">精选</th>
                 <th scope="col">更新时间</th>
+                <th scope="col">操作</th>
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td colSpan={5}>
-                  <EmptyState
-                    title="还没有项目"
-                    description="点击右上角「新建项目」添加第一个项目，或等待接口接入后自动加载现有数据。"
-                  />
-                </td>
-              </tr>
+              {projects.length === 0 ? (
+                <tr>
+                  <td colSpan={6}>
+                    <EmptyState
+                      title="还没有项目"
+                      description="点击右上角「新建项目」添加第一个项目。"
+                    />
+                  </td>
+                </tr>
+              ) : (
+                projects.map((project) => (
+                  <tr key={project.id}>
+                    <td>{project.title}</td>
+                    <td>{project.slug}</td>
+                    <td>{STATUS_LABEL[project.status] ?? project.status}</td>
+                    <td>{project.featured ? '是' : '否'}</td>
+                    <td>{project.updatedAt.slice(0, 19).replace('T', ' ')}</td>
+                    <td>
+                      <button type="button" className="btn btn--ghost" onClick={() => void deleteProject(project)}>
+                        删除
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
